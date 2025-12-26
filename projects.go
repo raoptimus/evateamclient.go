@@ -33,7 +33,7 @@ func (c *Client) Project(ctx context.Context, code string, fields []string) (*mo
 	}
 	kwargs["fields"] = fields
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfProject.get",
 		CallID:  newCallID(),
@@ -64,7 +64,7 @@ func (c *Client) Projects(ctx context.Context, fields []string, kwargs map[strin
 	}
 	kwargs["fields"] = fields
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfProject.list",
 		CallID:  newCallID(),

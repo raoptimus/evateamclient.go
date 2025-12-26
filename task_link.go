@@ -16,6 +16,10 @@ var DefaultTaskLinkFields = []string{
 
 // TaskLinks retrieves task relationships.
 func (c *Client) TaskLinks(ctx context.Context, taskCode string, fields []string) ([]models.CmfTaskLink, *models.CmfMeta, error) {
+	if len(fields) == 0 {
+		fields = DefaultTaskFields
+	}
+
 	kwargs := map[string]any{
 		"filter": []any{
 			[]any{"source_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
@@ -63,7 +67,7 @@ func (c *Client) TaskLinksList(ctx context.Context, kwargs map[string]any) ([]mo
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTaskLink.list",
 		CallID:  newCallID(),

@@ -14,7 +14,7 @@ func (c *Client) TasksCount(ctx context.Context, kwargs map[string]any) (int64, 
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTask.count",
 		CallID:  newCallID(),
@@ -101,7 +101,7 @@ func (c *Client) ProjectStats(ctx context.Context, projectCode string) (*models.
 	}
 
 	// Total users
-	users, _, err := c.ProjectUsers(ctx, projectCode, nil)
+	users, _, err := c.ProjectPersons(ctx, projectCode, nil)
 	if err == nil {
 		stats.TotalUsers = len(users)
 	}

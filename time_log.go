@@ -92,7 +92,7 @@ func (c *Client) TimeLogs(ctx context.Context, kwargs map[string]any) ([]models.
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTaskTimeLog.list",
 		CallID:  newCallID(),

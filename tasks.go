@@ -69,7 +69,7 @@ func (c *Client) Tasks(ctx context.Context, kwargs map[string]any) ([]models.Cmf
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTask.list",
 		CallID:  newCallID(),

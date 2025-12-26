@@ -13,8 +13,8 @@ var DefaultPersonFields = []string{
 	"id", "name", "email", "login", "active", "position", "department",
 }
 
-// ProjectUsers retrieves ALL users assigned to project.
-func (c *Client) ProjectUsers(ctx context.Context, projectCode string, fields []string) ([]models.CmfPerson, *models.CmfMeta, error) {
+// ProjectPersons retrieves ALL users assigned to project.
+func (c *Client) ProjectPersons(ctx context.Context, projectCode string, fields []string) ([]models.CmfPerson, *models.CmfMeta, error) {
 	if len(fields) == 0 {
 		fields = DefaultPersonFields
 	}
@@ -57,7 +57,7 @@ func (c *Client) Persons(ctx context.Context, kwargs map[string]any) ([]models.C
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfPerson.list",
 		CallID:  newCallID(),
