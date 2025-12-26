@@ -45,7 +45,7 @@ func (c *Client) Epics(ctx context.Context, kwargs map[string]any) ([]models.Cmf
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfEpic.list",
 		CallID:  newCallID(),
