@@ -2,7 +2,7 @@ package evateamclient
 
 import "github.com/gofrs/uuid"
 
-type rpcRequest struct {
+type RPCRequest struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Method  string      `json:"method"`
 	CallID  string      `json:"callid"`

@@ -54,7 +54,7 @@ func (c *Client) Sprints(ctx context.Context, kwargs map[string]any) ([]models.C
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfList.list",
 		CallID:  newCallID(),

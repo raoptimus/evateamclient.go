@@ -32,7 +32,7 @@ func (c *Client) Comments(ctx context.Context, kwargs map[string]any) ([]models.
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := rpcRequest{
+	reqBody := RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfComment.list",
 		CallID:  newCallID(),
