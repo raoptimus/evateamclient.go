@@ -364,7 +364,8 @@ if task == nil {
 | API Coverage | ✅ 100% | All 12+ resource types supported |
 | Error Handling | ✅ Full | Stack traces, contextual messages |
 | Type Safety | ✅ Complete | Zero `interface{}` in public API |
-| Testing | ✅ Included | Unit tests for all methods |
+
+[//]: # (| Testing | ✅ Included | Unit tests for all methods |)
 | Documentation | ✅ Comprehensive | This README + inline comments |
 | Performance | ✅ Optimized | Connection pooling, efficient filters |
 | Security | ✅ Encrypted | TLS by default, token in headers |
@@ -372,20 +373,19 @@ if task == nil {
 
 ## Versioning
 
-This library follows [Semantic Versioning](https://semver.org):
+This library follows [Semantic Versioning](https://semver.org/lang/en/):
 - `v1.x.x`: Production stable
 - Breaking changes trigger major version bump
 - New features trigger minor version bump
 
 ## Support
 
-- 📖 [EVA Team API Docs](https://eva.team/api/docs)
-- 🐛 [Report Issues](https://github.com/raoptimus/evateamclient/issues)
-- 💬 [Discussions](https://github.com/raoptimus/evateamclient/discussions)
+- 📖 [EVA Team API Docs](https://docs.evateam.ru/docs/docs/DOC-001729#api-specification)
+- 🐛 [Report Issues](https://github.com/raoptimus/evateamclient.go/issues)
 
 ## License
 
-MIT License - see LICENSE file for details
+BSD 3-Clause License - see LICENSE file for details
 
 ## Contributing
 
@@ -395,6 +395,3 @@ MIT License - see LICENSE file for details
 4. Push to branch (`git push origin feature/amazing`)
 5. Open Pull Request
 
----
-
-**Made with ❤️ for EVA Team users**
