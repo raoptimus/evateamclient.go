@@ -1,7 +1,7 @@
 package models
 
-// CmfSprint represents COMPLETE sprint object from CmfList.get/list.
-type CmfSprint struct {
+// Sprint represents COMPLETE sprint object from List.get/list.
+type Sprint struct {
 	ID          string  `json:"id"`
 	ClassName   string  `json:"class_name"`
 	Code        string  `json:"code"`
@@ -16,9 +16,9 @@ type CmfSprint struct {
 	SlOwnerLock bool    `json:"sl_owner_lock,omitempty"`
 }
 
-// CmfSprintListResponse for CmfList.list (sprints).
-type CmfSprintListResponse struct {
-	JSONRPC string      `json:"jsonrpc,omitempty"`
-	Result  []CmfSprint `json:"result,omitempty"`
-	Meta    CmfMeta     `json:"meta,omitempty"`
+// SprintListResponse for List.list (sprints).
+type SprintListResponse struct {
+	JSONRPC string   `json:"jsonrpc,omitempty"`
+	Result  []Sprint `json:"result,omitempty"`
+	Meta    Meta     `json:"meta,omitempty"`
 }

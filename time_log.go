@@ -2,20 +2,22 @@ package evateamclient
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
 	"github.com/raoptimus/evateamclient/models"
 )
 
 // DefaultTimeLogFields for time log queries.
 var DefaultTimeLogFields = []string{
-	"id", "task_id", "user_id", "user_name", "user_login",
-	"minutes_spent", "date", "description", "cmf_created_at",
+	"id", "code", "time_spent", "author", "parent",
+	"description", "cmf_created_at", "cmf_modified_at",
 }
 
 // TimeLog retrieves single time log entry by ID.
-func (c *Client) TimeLog(ctx context.Context, timeLogID string, fields []string) (*models.CmfTaskTimeLog, *models.CmfMeta, error) {
+func (c *Client) TimeLog(
+	ctx context.Context,
+	timeLogID string,
+	fields []string,
+) (*models.TaskTimeLog, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTimeLogFields
 	}
@@ -39,13 +41,17 @@ func (c *Client) TimeLog(ctx context.Context, timeLogID string, fields []string)
 }
 
 // TaskTimeLogs retrieves ALL time entries for specific task.
-func (c *Client) TaskTimeLogs(ctx context.Context, taskCode string, fields []string) ([]models.CmfTaskTimeLog, *models.CmfMeta, error) {
+func (c *Client) TaskTimeLogs(
+	ctx context.Context,
+	taskID string,
+	fields []string,
+) ([]models.TaskTimeLog, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTimeLogFields
 	}
 
 	kwargs := map[string]any{
-		"filter":   []any{"task_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
+		"filter":   []any{"parent", "==", taskID},
 		"fields":   fields,
 		"order_by": []string{"-cmf_created_at"},
 	}
@@ -54,14 +60,19 @@ func (c *Client) TaskTimeLogs(ctx context.Context, taskCode string, fields []str
 }
 
 // UserTaskTimeLogs retrieves time entries for task by specific user.
-func (c *Client) UserTaskTimeLogs(ctx context.Context, taskCode, userID string, fields []string) ([]models.CmfTaskTimeLog, *models.CmfMeta, error) {
+func (c *Client) UserTaskTimeLogs(
+	ctx context.Context,
+	taskID,
+	userID string,
+	fields []string,
+) ([]models.TaskTimeLog, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTimeLogFields
 	}
 
 	kwargs := map[string]any{
 		"filter": [][]any{
-			{"task_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
+			{"task_id", "==", taskID},
 			{"user_id", "==", userID},
 		},
 		"fields":   fields,
@@ -72,13 +83,17 @@ func (c *Client) UserTaskTimeLogs(ctx context.Context, taskCode, userID string, 
 }
 
 // ProjectTimeLogs retrieves ALL time entries for project tasks.
-func (c *Client) ProjectTimeLogs(ctx context.Context, projectCode string, fields []string) ([]models.CmfTaskTimeLog, *models.CmfMeta, error) {
+func (c *Client) ProjectTimeLogs(
+	ctx context.Context,
+	projectID string,
+	fields []string,
+) ([]models.TaskTimeLog, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTimeLogFields
 	}
 
 	kwargs := map[string]any{
-		"filter":   []any{"task_id.project_id", "==", fmt.Sprintf("CmfProject:%s", projectCode)},
+		"filter":   []any{"task_id.project_id", "==", projectID},
 		"fields":   fields,
 		"order_by": []string{"-cmf_created_at"},
 	}
@@ -87,20 +102,23 @@ func (c *Client) ProjectTimeLogs(ctx context.Context, projectCode string, fields
 }
 
 // TimeLogs retrieves time logs with custom filters.
-func (c *Client) TimeLogs(ctx context.Context, kwargs map[string]any) ([]models.CmfTaskTimeLog, *models.CmfMeta, error) {
+func (c *Client) TimeLogs(
+	ctx context.Context,
+	kwargs map[string]any,
+) ([]models.TaskTimeLog, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := RPCRequest{
+	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "CmfTaskTimeLog.list",
+		Method:  "CmfTimeTrackerHistory.list",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
 
-	var resp models.CmfTaskTimeLogListResponse
-	if err := c.doRequest(ctx, http.MethodPost, "/api/?m=CmfTaskTimeLog.list", reqBody, &resp); err != nil {
+	var resp models.TaskTimeLogListResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, nil, err
 	}
 

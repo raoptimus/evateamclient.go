@@ -3,26 +3,25 @@ package evateamclient
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/raoptimus/evateamclient/models"
 )
 
 // TasksCount returns total tasks matching filters.
-func (c *Client) TasksCount(ctx context.Context, kwargs map[string]any) (int64, *models.CmfMeta, error) {
+func (c *Client) TasksCount(ctx context.Context, kwargs map[string]any) (int64, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := RPCRequest{
+	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTask.count",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
 
-	var resp models.CmfCountResponse
-	if err := c.doRequest(ctx, http.MethodPost, "/api/?m=CmfTask.count", reqBody, &resp); err != nil {
+	var resp models.CountResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return 0, nil, err
 	}
 
@@ -30,15 +29,15 @@ func (c *Client) TasksCount(ctx context.Context, kwargs map[string]any) (int64, 
 }
 
 // ProjectTasksCount returns total tasks in project.
-func (c *Client) ProjectTasksCount(ctx context.Context, projectCode string) (int64, *models.CmfMeta, error) {
+func (c *Client) ProjectTasksCount(ctx context.Context, projectCode string) (int64, *models.Meta, error) {
 	kwargs := map[string]any{
-		"filter": []any{"project_id", "==", fmt.Sprintf("CmfProject:%s", projectCode)},
+		"filter": []any{"project_id", "==", fmt.Sprintf("Project:%s", projectCode)},
 	}
 	return c.TasksCount(ctx, kwargs)
 }
 
 // SprintTasksCount returns total tasks in sprint.
-func (c *Client) SprintTasksCount(ctx context.Context, sprintCode string) (int64, *models.CmfMeta, error) {
+func (c *Client) SprintTasksCount(ctx context.Context, sprintCode string) (int64, *models.Meta, error) {
 	kwargs := map[string]any{
 		"filter": []any{"lists", "contains", sprintCode},
 	}
@@ -62,7 +61,7 @@ func (c *Client) SprintStats(ctx context.Context, sprintCode string) (*models.Sp
 	// Count by status
 	statusCount := make(map[string]int)
 	for _, task := range tasks {
-		statusCount[task.CacheStatus]++
+		statusCount[task.CacheStatusType]++
 	}
 	stats.TasksByStatus = statusCount
 
@@ -70,7 +69,7 @@ func (c *Client) SprintStats(ctx context.Context, sprintCode string) (*models.Sp
 }
 
 // ProjectStats retrieves project statistics.
-func (c *Client) ProjectStats(ctx context.Context, projectCode string) (*models.ProjectStats, *models.CmfMeta, error) {
+func (c *Client) ProjectStats(ctx context.Context, projectCode string) (*models.ProjectStats, *models.Meta, error) {
 	stats := &models.ProjectStats{ProjectID: projectCode}
 
 	// Total tasks
@@ -82,7 +81,7 @@ func (c *Client) ProjectStats(ctx context.Context, projectCode string) (*models.
 	// Open tasks
 	openCount, _, err := c.TasksCount(ctx, map[string]any{
 		"filter": [][]any{
-			{"project_id", "==", fmt.Sprintf("CmfProject:%s", projectCode)},
+			{"project_id", "==", fmt.Sprintf("Project:%s", projectCode)},
 			{"cache_status_type", "==", "OPEN"},
 		},
 	})
@@ -101,9 +100,9 @@ func (c *Client) ProjectStats(ctx context.Context, projectCode string) (*models.
 	}
 
 	// Total users
-	users, _, err := c.ProjectPersons(ctx, projectCode, nil)
+	project, _, err := c.Project(ctx, projectCode, []string{"executors"})
 	if err == nil {
-		stats.TotalUsers = len(users)
+		stats.TotalUsers = len(project.Executors)
 	}
 
 	return stats, nil, nil

@@ -3,7 +3,6 @@ package evateamclient
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/raoptimus/evateamclient/models"
 )
@@ -15,15 +14,19 @@ var DefaultTaskLinkFields = []string{
 }
 
 // TaskLinks retrieves task relationships.
-func (c *Client) TaskLinks(ctx context.Context, taskCode string, fields []string) ([]models.CmfTaskLink, *models.CmfMeta, error) {
+func (c *Client) TaskLinks(
+	ctx context.Context,
+	taskCode string,
+	fields []string,
+) ([]models.TaskLink, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTaskFields
 	}
 
 	kwargs := map[string]any{
 		"filter": []any{
-			[]any{"source_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
-			[]any{"target_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
+			[]any{"source_id", "==", fmt.Sprintf("Task:%s", taskCode)},
+			[]any{"target_id", "==", fmt.Sprintf("Task:%s", taskCode)},
 		},
 		"fields": fields,
 	}
@@ -32,13 +35,17 @@ func (c *Client) TaskLinks(ctx context.Context, taskCode string, fields []string
 }
 
 // TaskLinksOutgoing retrieves links where task is source only.
-func (c *Client) TaskLinksOutgoing(ctx context.Context, taskCode string, fields []string) ([]models.CmfTaskLink, *models.CmfMeta, error) {
+func (c *Client) TaskLinksOutgoing(
+	ctx context.Context,
+	taskCode string,
+	fields []string,
+) ([]models.TaskLink, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTaskLinkFields
 	}
 
 	kwargs := map[string]any{
-		"filter":   []any{"source_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
+		"filter":   []any{"source_id", "==", fmt.Sprintf("Task:%s", taskCode)},
 		"fields":   fields,
 		"order_by": []string{"-cmf_created_at"},
 	}
@@ -47,13 +54,17 @@ func (c *Client) TaskLinksOutgoing(ctx context.Context, taskCode string, fields 
 }
 
 // TaskLinksIncoming retrieves links where task is target only.
-func (c *Client) TaskLinksIncoming(ctx context.Context, taskCode string, fields []string) ([]models.CmfTaskLink, *models.CmfMeta, error) {
+func (c *Client) TaskLinksIncoming(
+	ctx context.Context,
+	taskCode string,
+	fields []string,
+) ([]models.TaskLink, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTaskLinkFields
 	}
 
 	kwargs := map[string]any{
-		"filter":   []any{"target_id", "==", fmt.Sprintf("CmfTask:%s", taskCode)},
+		"filter":   []any{"target_id", "==", fmt.Sprintf("Task:%s", taskCode)},
 		"fields":   fields,
 		"order_by": []string{"-cmf_created_at"},
 	}
@@ -62,20 +73,23 @@ func (c *Client) TaskLinksIncoming(ctx context.Context, taskCode string, fields 
 }
 
 // TaskLinksList retrieves task links with custom filters.
-func (c *Client) TaskLinksList(ctx context.Context, kwargs map[string]any) ([]models.CmfTaskLink, *models.CmfMeta, error) {
+func (c *Client) TaskLinksList(
+	ctx context.Context,
+	kwargs map[string]any,
+) ([]models.TaskLink, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
 
-	reqBody := RPCRequest{
+	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTaskLink.list",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
 
-	var resp models.CmfTaskLinkListResponse
-	if err := c.doRequest(ctx, http.MethodPost, "/api/?m=CmfTaskLink.list", reqBody, &resp); err != nil {
+	var resp models.TaskLinkListResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, nil, err
 	}
 

@@ -128,7 +128,7 @@ for _, log := range logs {
 ```go
 kwargs := map[string]any{
     "filter": [][]any{
-        {"project_id", "==", "CmfProject:uuid-here"},
+        {"project_id", "==", "Project:uuid-here"},
         {"cache_status_type", "==", "OPEN"},
     },
     "order_by": []string{"-cmf_created_at"},
@@ -254,7 +254,7 @@ client, err := evateamclient.NewClient(cfg,
 
 Log output (debug mode):
 ```
-method=POST url=https://api.eva.team/api/?m=CmfProject.get
+method=POST url=https://api.eva.team/api/?m=Project.get
 func=Project requestBody={...} responseBody={...}
 responseStatus=200 duration=145.2ms error=nil
 ```
@@ -280,7 +280,7 @@ client, _ := evateamclient.NewClient(cfg,
 All response models are fully typed with `omitempty` tags:
 
 ```go
-type CmfProject struct {
+type Project struct {
     ID            string  `json:"id"`
     ClassName     string  `json:"class_name"`
     Code          string  `json:"code"`

@@ -20,9 +20,9 @@ type ProjectStats struct {
 	TotalUsers    int    `json:"total_users,omitempty"`
 }
 
-// CmfCountResponse for count queries.
-type CmfCountResponse struct {
-	JSONRPC string  `json:"jsonrpc,omitempty"`
-	Result  int64   `json:"result,omitempty"`
-	Meta    CmfMeta `json:"meta,omitempty"`
+// CountResponse for count queries.
+type CountResponse struct {
+	JSONRPC string `json:"jsonrpc,omitempty"`
+	Result  int64  `json:"result,omitempty"`
+	Meta    Meta   `json:"meta,omitempty"`
 }

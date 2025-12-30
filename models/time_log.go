@@ -1,23 +1,21 @@
 package models
 
-// CmfTaskTimeLog represents COMPLETE time log entry from CmfTaskTimeLog.list.
-type CmfTaskTimeLog struct {
-	ID           string `json:"id"`
-	ClassName    string `json:"class_name"`
-	TaskID       string `json:"task_id,omitempty"` // "CmfTask:UUID"
-	UserID       string `json:"user_id,omitempty"` // "CmfPerson:UUID"
-	UserName     string `json:"user_name,omitempty"`
-	UserLogin    string `json:"user_login,omitempty"`
-	MinutesSpent int    `json:"minutes_spent,omitempty"`
-	Date         string `json:"date,omitempty"` // "2025-12-27"
-	Description  string `json:"description,omitempty"`
-	CreatedAt    string `json:"cmf_created_at,omitempty"`
-	ModifiedAt   string `json:"cmf_modified_at,omitempty"`
+import "time"
+
+// TaskTimeLog represents COMPLETE time log entry from TaskTimeLog.list.
+type TaskTimeLog struct {
+	ID          string     `json:"id"` // "CmfTimeTrackerHistory:xxx"
+	Code        string     `json:"code"`
+	TimeSpent   float64    `json:"time_spent"` // 1.5 hours
+	Description string     `json:"description"`
+	Parent      string     `json:"parent"` // "CmfTask:ff513e16-e4c4-11f0-86ab-029a32f97d49"
+	Author      *Person    `json:"author,omitempty"`
+	CreatedAt   *time.Time `json:"cmf_created_at,omitempty"`
 }
 
-// CmfTaskTimeLogListResponse for CmfTaskTimeLog.list.
-type CmfTaskTimeLogListResponse struct {
-	JSONRPC string           `json:"jsonrpc,omitempty"`
-	Result  []CmfTaskTimeLog `json:"result,omitempty"`
-	Meta    CmfMeta          `json:"meta,omitempty"`
+// TaskTimeLogListResponse for TaskTimeLog.list.
+type TaskTimeLogListResponse struct {
+	JSONRPC string        `json:"jsonrpc,omitempty"`
+	Result  []TaskTimeLog `json:"result,omitempty"`
+	Meta    Meta          `json:"meta,omitempty"`
 }

@@ -2,7 +2,6 @@ package evateamclient
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/raoptimus/evateamclient/models"
 )
@@ -14,7 +13,11 @@ var DefaultSprintFields = []string{
 }
 
 // ProjectSprints retrieves ALL sprints for project.
-func (c *Client) ProjectSprints(ctx context.Context, projectCode string, fields []string) ([]models.CmfSprint, *models.CmfMeta, error) {
+func (c *Client) ProjectSprints(
+	ctx context.Context,
+	projectCode string,
+	fields []string,
+) ([]models.Sprint, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultSprintFields
 	}
@@ -26,7 +29,11 @@ func (c *Client) ProjectSprints(ctx context.Context, projectCode string, fields 
 	return c.Sprints(ctx, kwargs)
 }
 
-func (c *Client) Sprint(ctx context.Context, sprintCode string, fields []string) (*models.CmfSprint, *models.CmfMeta, error) {
+func (c *Client) Sprint(
+	ctx context.Context,
+	sprintCode string,
+	fields []string,
+) (*models.Sprint, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultSprintFields
 	}
@@ -50,18 +57,18 @@ func (c *Client) Sprint(ctx context.Context, sprintCode string, fields []string)
 }
 
 // Sprints retrieves sprints with custom filters.
-func (c *Client) Sprints(ctx context.Context, kwargs map[string]any) ([]models.CmfSprint, *models.CmfMeta, error) {
+func (c *Client) Sprints(ctx context.Context, kwargs map[string]any) ([]models.Sprint, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}
-	reqBody := RPCRequest{
+	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfList.list",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
-	var resp models.CmfSprintListResponse
-	if err := c.doRequest(ctx, http.MethodPost, "/api/?m=CmfList.list", reqBody, &resp); err != nil {
+	var resp models.SprintListResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, nil, err
 	}
 
@@ -69,7 +76,10 @@ func (c *Client) Sprints(ctx context.Context, kwargs map[string]any) ([]models.C
 }
 
 // ActiveProjectSprint retrieves currently active sprint.
-func (c *Client) ActiveProjectSprint(ctx context.Context, projectCode string) (*models.CmfSprint, *models.CmfMeta, error) {
+func (c *Client) ActiveProjectSprint(
+	ctx context.Context,
+	projectCode string,
+) (*models.Sprint, *models.Meta, error) {
 	kwargs := map[string]any{
 		"filter": [][]any{
 			{"parent", "==", projectCode},
