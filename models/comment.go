@@ -11,6 +11,14 @@ type Comment struct {
 	LogLevel  string `json:"log_level,omitempty"`
 }
 
+// CommentResponse for Comment.get (single comment).
+type CommentResponse struct {
+	JSONRPC string  `json:"jsonrpc,omitempty"`
+	Result  Comment `json:"result,omitempty"`
+	Meta    Meta    `json:"meta,omitempty"`
+}
+
+// CommentListResponse for Comment.list.
 type CommentListResponse struct {
 	JSONRPC string    `json:"jsonrpc,omitempty"`
 	Result  []Comment `json:"result,omitempty"`

@@ -25,6 +25,13 @@ type Person struct {
 	//ACLObj    string            `json:"_acl_obj,omitempty"`
 }
 
+// PersonResponse for Person.get.
+type PersonResponse struct {
+	JSONRPC string `json:"jsonrpc,omitempty"`
+	Result  Person `json:"result,omitempty"`
+	Meta    Meta   `json:"meta,omitempty"`
+}
+
 // PersonListResponse for Person.list.
 type PersonListResponse struct {
 	JSONRPC string   `json:"jsonrpc,omitempty"`

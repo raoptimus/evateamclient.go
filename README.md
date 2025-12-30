@@ -119,8 +119,39 @@ if err != nil {
 }
 
 for _, log := range logs {
-    fmt.Printf("%s: %d min by %s\n", log.Date, log.MinutesSpent, log.UserName)
+    fmt.Printf("%s: %d min by %s\n", log.CreatedAt, log.TimeSpent, log.CmfOwnerID)
 }
+```
+
+### Get Total Actual Labor Costs for a Project Over a Period
+
+```go
+import (
+    sq "github.com/Masterminds/squirrel"
+    "github.com/raoptimus/evateamclient"
+)
+
+// Build query for time logs in date range
+qb := evateamclient.NewQueryBuilder().
+    Select("id", "time_spent", "parent_id", "cmf_owner_id", "cmf_created_at").
+    From(evateamclient.EntityTimeLog).
+    Where(sq.Eq{"project_id": "CmfProject:your-project-uuid"}).
+    Where(sq.GtOrEq{"cmf_created_at": "2025-01-01"}).
+    Where(sq.LtOrEq{"cmf_created_at": "2025-01-31"})
+
+logs, _, err := client.TimeLogsList(ctx, qb)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Calculate total time spent (in minutes)
+var totalMinutes int
+for _, log := range logs {
+    totalMinutes += log.TimeSpent
+}
+
+fmt.Printf("Total time spent: %d hours %d minutes\n",
+    totalMinutes/60, totalMinutes%60)
 ```
 
 ### Advanced: Custom Filters
@@ -201,6 +232,16 @@ Epics(ctx, kwargs)                       // List with custom filters
 ```go
 TaskComments(ctx, taskCode, fields)  // Get task comments
 Comments(ctx, kwargs)                // List with custom filters
+```
+
+### Status History
+```go
+StatusHistory(ctx, id, fields)              // Get single status change
+TaskStatusHistory(ctx, taskID, fields)      // Get task status changes
+ProjectStatusHistory(ctx, projectID, fields) // Get project status changes
+StatusHistoryList(ctx, qb)                  // List with QueryBuilder
+StatusHistoryCount(ctx, qb)                 // Count status changes
+StatusHistories(ctx, kwargs)                // List with custom filters
 ```
 
 ### Statistics

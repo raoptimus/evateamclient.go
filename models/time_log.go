@@ -2,20 +2,42 @@ package models
 
 import "time"
 
-// TaskTimeLog represents COMPLETE time log entry from TaskTimeLog.list.
-type TaskTimeLog struct {
-	ID          string     `json:"id"` // "CmfTimeTrackerHistory:xxx"
-	Code        string     `json:"code"`
-	TimeSpent   float64    `json:"time_spent"` // 1.5 hours
-	Description string     `json:"description"`
-	Parent      string     `json:"parent"` // "CmfTask:ff513e16-e4c4-11f0-86ab-029a32f97d49"
-	Author      *Person    `json:"author,omitempty"`
-	CreatedAt   *time.Time `json:"cmf_created_at,omitempty"`
+// TimeLogParent represents nested parent task info in time log response.
+type TimeLogParent struct {
+	ID         string `json:"id"`
+	ClassName  string `json:"class_name"`
+	ParentID   string `json:"parent_id"`
+	ProjectID  string `json:"project_id"`
+	CmfOwnerID string `json:"cmf_owner_id"`
+	Name       string `json:"name"`
+	Code       string `json:"code"`
+	WorkflowID string `json:"workflow_id"`
 }
 
-// TaskTimeLogListResponse for TaskTimeLog.list.
-type TaskTimeLogListResponse struct {
-	JSONRPC string        `json:"jsonrpc,omitempty"`
-	Result  []TaskTimeLog `json:"result,omitempty"`
-	Meta    Meta          `json:"meta,omitempty"`
+// TimeLog represents time log entry from CmfTimeTrackerHistory.list.
+type TimeLog struct {
+	ID         string         `json:"id"`
+	ClassName  string         `json:"class_name"`
+	Code       string         `json:"code"`
+	Name       *string        `json:"name"`
+	TimeSpent  int            `json:"time_spent"` // minutes
+	Parent     *TimeLogParent `json:"parent,omitempty"`
+	ParentID   string         `json:"parent_id"`
+	ProjectID  string         `json:"project_id"`
+	CmfOwnerID string         `json:"cmf_owner_id"`
+	CreatedAt  *time.Time     `json:"cmf_created_at,omitempty"`
+}
+
+// TimeLogResponse for CmfTimeTrackerHistory.get.
+type TimeLogResponse struct {
+	JSONRPC string  `json:"jsonrpc,omitempty"`
+	Result  TimeLog `json:"result,omitempty"`
+	Meta    Meta    `json:"meta,omitempty"`
+}
+
+// TimeLogListResponse for CmfTimeTrackerHistory.list.
+type TimeLogListResponse struct {
+	JSONRPC string    `json:"jsonrpc,omitempty"`
+	Result  []TimeLog `json:"result,omitempty"`
+	Meta    Meta      `json:"meta,omitempty"`
 }

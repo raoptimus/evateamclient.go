@@ -243,3 +243,177 @@ func (c *Client) Projects(
 
 	return resp.Result, &resp.Meta, nil
 }
+
+// CRUD Operations
+
+// ProjectCreateParams contains parameters for creating a new project
+type ProjectCreateParams struct {
+	Code       string   `json:"code"`
+	Name       string   `json:"name"`
+	Text       string   `json:"text,omitempty"`
+	WorkflowID string   `json:"workflow_id,omitempty"`
+	Executors  []string `json:"executors,omitempty"`
+	Admins     []string `json:"cmfprojectadmins,omitempty"`
+}
+
+// ProjectCreate creates a new project
+// Example:
+//
+//	params := evateamclient.ProjectCreateParams{
+//	  Code: "NEWPROJ",
+//	  Name: "New Project",
+//	}
+//	project, err := client.ProjectCreate(ctx, params)
+func (c *Client) ProjectCreate(
+	ctx context.Context,
+	params ProjectCreateParams,
+) (*models.Project, error) {
+	kwargs := map[string]any{
+		"code": params.Code,
+		"name": params.Name,
+	}
+
+	if params.Text != "" {
+		kwargs["text"] = params.Text
+	}
+	if params.WorkflowID != "" {
+		kwargs["workflow_id"] = params.WorkflowID
+	}
+	if len(params.Executors) > 0 {
+		kwargs["executors"] = params.Executors
+	}
+	if len(params.Admins) > 0 {
+		kwargs["cmfprojectadmins"] = params.Admins
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfProject.create",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp models.ProjectGetResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp.Result, nil
+}
+
+// ProjectUpdate updates an existing project
+// Example:
+//
+//	updates := map[string]any{
+//	  "name": "Updated Project Name",
+//	}
+//	project, err := client.ProjectUpdate(ctx, "Project:uuid", updates)
+func (c *Client) ProjectUpdate(
+	ctx context.Context,
+	projectID string,
+	updates map[string]any,
+) (*models.Project, error) {
+	kwargs := map[string]any{
+		"id": projectID,
+	}
+	for k, v := range updates {
+		kwargs[k] = v
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfProject.update",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp models.ProjectGetResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp.Result, nil
+}
+
+// ProjectDelete deletes a project by ID
+// Example:
+//
+//	err := client.ProjectDelete(ctx, "Project:uuid")
+func (c *Client) ProjectDelete(
+	ctx context.Context,
+	projectID string,
+) error {
+	kwargs := map[string]any{
+		"id": projectID,
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfProject.delete",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  bool   `json:"result"`
+	}
+
+	return c.doRequest(ctx, reqBody, &resp)
+}
+
+// ProjectAddExecutor adds an executor to project
+// Example:
+//
+//	err := client.ProjectAddExecutor(ctx, "Project:uuid", "Person:uuid")
+func (c *Client) ProjectAddExecutor(
+	ctx context.Context,
+	projectID, personID string,
+) error {
+	kwargs := map[string]any{
+		"id":        projectID,
+		"executors": []string{personID},
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfProject.add_executors",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  bool   `json:"result"`
+	}
+
+	return c.doRequest(ctx, reqBody, &resp)
+}
+
+// ProjectRemoveExecutor removes an executor from project
+// Example:
+//
+//	err := client.ProjectRemoveExecutor(ctx, "Project:uuid", "Person:uuid")
+func (c *Client) ProjectRemoveExecutor(
+	ctx context.Context,
+	projectID, personID string,
+) error {
+	kwargs := map[string]any{
+		"id":        projectID,
+		"executors": []string{personID},
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfProject.remove_executors",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  bool   `json:"result"`
+	}
+
+	return c.doRequest(ctx, reqBody, &resp)
+}

@@ -11,14 +11,15 @@ import (
 // This allows using real Squirrel API with EVA Team backend
 //
 // Example:
-//   qb := evateamclient.NewQueryBuilder().
-//     Select("id", "name", "code").
-//     From(EntityProject).
-//     Where(sq.Eq{"code": "PROJ-123"}).
-//     OrderBy("-cmf_created_at").
-//     Limit(50)
 //
-//   projects, meta, err := client.ProjectsList(ctx, qb)
+//	qb := evateamclient.NewQueryBuilder().
+//	  Select("id", "name", "code").
+//	  From(EntityProject).
+//	  Where(sq.Eq{"code": "PROJ-123"}).
+//	  OrderBy("-cmf_created_at").
+//	  Limit(50)
+//
+//	projects, meta, err := client.ProjectsList(ctx, qb)
 type QueryBuilder struct {
 	selectBuilder sq.SelectBuilder
 	includeArch   bool
@@ -51,10 +52,11 @@ func (qb *QueryBuilder) From(table string) *QueryBuilder {
 // Multiple Where() calls are combined with AND logic
 //
 // Examples:
-//   qb.Where(sq.Eq{"code": "PROJ-123"})
-//   qb.Where(sq.Gt{"priority": 3})
-//   qb.Where(sq.Like{"name": "%Mobile%"})
-//   qb.Where(sq.And{sq.Eq{"system": false}, sq.GtOrEq{"created_at": "2024-01-01"}})
+//
+//	qb.Where(sq.Eq{"code": "PROJ-123"})
+//	qb.Where(sq.Gt{"priority": 3})
+//	qb.Where(sq.Like{"name": "%Mobile%"})
+//	qb.Where(sq.And{sq.Eq{"system": false}, sq.GtOrEq{"created_at": "2024-01-01"}})
 func (qb *QueryBuilder) Where(pred any) *QueryBuilder {
 	qb.selectBuilder = qb.selectBuilder.Where(pred)
 	return qb
@@ -64,9 +66,10 @@ func (qb *QueryBuilder) Where(pred any) *QueryBuilder {
 // Use "-field" prefix for DESC order, "field" for ASC
 //
 // Examples:
-//   qb.OrderBy("name")                    // ASC
-//   qb.OrderBy("-cmf_created_at")        // DESC
-//   qb.OrderBy("-priority", "name")      // Multiple columns
+//
+//	qb.OrderBy("name")                    // ASC
+//	qb.OrderBy("-cmf_created_at")        // DESC
+//	qb.OrderBy("-priority", "name")      // Multiple columns
 func (qb *QueryBuilder) OrderBy(orderBys ...string) *QueryBuilder {
 	qb.selectBuilder = qb.selectBuilder.OrderBy(orderBys...)
 	return qb

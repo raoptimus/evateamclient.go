@@ -2,9 +2,8 @@ package evateamclient
 
 import (
 	"context"
-	"fmt"
 	"net/url"
-	"runtime"
+	"os"
 	"time"
 
 	"github.com/imroc/req/v3"
@@ -15,15 +14,9 @@ import (
 const defaultTimeout = 30 * time.Second
 const basePath = "/api/"
 
-var (
-	ErrOptionIsRequired    = errors.New("option is required")
-	ErrBodyIsRequired      = errors.New("body is required")
-	ErrRPCMethodIsRequired = errors.New("RPCRequest.Method is required")
-)
-
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// Client структура
+// Client is the EVA Team API client
 type Client struct {
 	metrics    Metrics
 	baseURL    *url.URL
@@ -33,7 +26,7 @@ type Client struct {
 	debug      bool
 }
 
-// Config структура
+// Config holds client configuration
 type Config struct {
 	BaseURL  string
 	APIToken string
@@ -131,8 +124,15 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 				"duration", time.Since(startTime).String(),
 				"error", err,
 			)
-			fmt.Println("RESPONSE:\n")
-			fmt.Println(string(respBodyBytes))
+			f, err := os.OpenFile("./response.json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+			if err != nil {
+				c.logError(ctx, err.Error())
+				return
+			}
+			defer f.Close()
+			if _, err = f.Write(respBodyBytes); err != nil {
+				c.logError(ctx, err.Error())
+			}
 		}
 	}()
 
@@ -157,6 +157,15 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 		return errors.Errorf("API error %d: %s", resp.StatusCode, string(resp.Bytes()))
 	}
 
+	// Check for RPC error in 200 OK response
+	var rpcErr rpcErrorResponse
+	if err := json.Unmarshal(respBodyBytes, &rpcErr); err != nil {
+		return errors.WithMessage(err, "unmarshal rpc error check")
+	}
+	if rpcErr.Error != nil {
+		return errors.WithMessagef(rpcErr.Error, "RPC error %d", rpcErr.Error.Code)
+	}
+
 	if result != nil {
 		if err := json.Unmarshal(respBodyBytes, result); err != nil {
 			return errors.WithMessage(err, "unmarshal response body")
@@ -166,21 +175,14 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 	return nil
 }
 
+// Close closes client
+func (c *Client) Close() error {
+	return nil
+}
+
 func (c *Client) logDebug(ctx context.Context, msg string, args ...any) {
 	if c.logger != nil && c.debug {
 		c.logger.Debug(ctx, msg, args...)
-	}
-}
-
-func (c *Client) logInfo(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Info(ctx, msg, args...)
-	}
-}
-
-func (c *Client) logWarn(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Warn(ctx, msg, args...)
 	}
 }
 
@@ -188,18 +190,4 @@ func (c *Client) logError(ctx context.Context, msg string, args ...any) {
 	if c.logger != nil {
 		c.logger.Error(ctx, msg, args...)
 	}
-}
-
-// Close закрывает клиент
-func (c *Client) Close() error {
-	return nil
-}
-
-// functionName вспомогательная функция (БЕЗ Get префикса!)
-func functionName(skip int) string {
-	pc, _, _, ok := runtime.Caller(skip)
-	if !ok {
-		return "unknown"
-	}
-	return runtime.FuncForPC(pc).Name()
 }

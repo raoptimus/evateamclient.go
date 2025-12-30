@@ -10,9 +10,11 @@ type RPCRequest struct {
 	Kwargs  interface{} `json:"kwargs,omitempty"`
 }
 
-var AllBasicFields = []string{"*"}
-var AllBasicAndRelationFields = []string{"**"}
-var AllBasicAndRelationAndM2MFields = []string{"***"}
+var (
+	AllBasicFields                  = []string{"*"}
+	AllBasicAndRelationFields       = []string{"**"}
+	AllBasicAndRelationAndM2MFields = []string{"***"}
+)
 
 func newCallID() string {
 	id, _ := uuid.NewV4()

@@ -1,20 +1,5 @@
 package models
 
-// List represents a sprint, release or other list in EVA system
-type List struct {
-	ID                string `json:"id"`
-	ClassName         string `json:"class_name"`
-	Code              string `json:"code"`
-	Name              string `json:"name"`
-	CacheStatusType   string `json:"cache_status_type,omitempty"`
-	CacheMembersCount int    `json:"cache_members_count,omitempty"`
-	LimitDays         string `json:"limit_days,omitempty"`
-	ParentID          string `json:"parent_id,omitempty"`
-	ProjectID         string `json:"project_id,omitempty"`
-	CmfOwnerID        string `json:"cmf_owner_id,omitempty"`
-	WorkflowID        string `json:"workflow_id,omitempty"`
-}
-
 // Task represents COMPLETE task object from Task.get/list.
 type Task struct {
 	// Core identification
@@ -89,6 +74,13 @@ type Task struct {
 	EpicID               string `json:"epic_id,omitempty"`
 	LogicTypeID          string `json:"logic_type_id,omitempty"`
 	ResponsibleID        string `json:"responsible_id,omitempty"`
+}
+
+// TaskResponse for Task.get (single task).
+type TaskResponse struct {
+	JSONRPC string `json:"jsonrpc"`
+	Result  Task   `json:"result"`
+	Meta    Meta   `json:"meta,omitempty"`
 }
 
 // TaskListResponse for Task.list.
