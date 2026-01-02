@@ -1,6 +1,16 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - 'doc/**'
+      - '**.md'
+    branches: [main]
+    tags: [v*]
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - '**.md'
 
 env:
   GO_VERSION: '1.25'
