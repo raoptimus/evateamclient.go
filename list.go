@@ -140,7 +140,7 @@ func (c *Client) ListQuery(ctx context.Context, qb *QueryBuilder) (*models.List,
 //	  Select("id", "code", "name", "cache_status_type").
 //	  From(evateamclient.EntityList).
 //	  Where(sq.Eq{"project_id": "CmfProject:uuid"}).
-//	  Where(sq.Eq{"cache_status_type": "OPEN"}).
+//	  Where(sq.Eq{"cache_status_type": evateamclient.StatusTypeOpen}).
 //	  Offset(0).Limit(50)
 //	lists, meta, err := client.ListsList(ctx, qb)
 func (c *Client) ListsList(
@@ -242,7 +242,7 @@ func (c *Client) OpenProjectLists(
 		Select(fields...).
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
-		Where(sq.Eq{ListFieldCacheStatusType: "OPEN"})
+		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }
@@ -445,7 +445,7 @@ func (c *Client) OpenProjectSprints(
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
 		Where(sq.Like{ListFieldCode: ListCodePrefixSprint + "%"}).
-		Where(sq.Eq{ListFieldCacheStatusType: "OPEN"})
+		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }
@@ -499,7 +499,7 @@ func (c *Client) OpenProjectReleases(
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
 		Where(sq.Like{ListFieldCode: ListCodePrefixRelease + "%"}).
-		Where(sq.Eq{ListFieldCacheStatusType: "OPEN"})
+		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }

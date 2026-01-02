@@ -16,12 +16,26 @@ const basePath = "/api/"
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+type HTTPClient interface {
+	Post(ctx context.Context, body []byte, url string) (*req.Response, error)
+}
+type httpClient struct {
+	hc *req.Client
+}
+
+func (h *httpClient) Post(ctx context.Context, body []byte, url string) (*req.Response, error) {
+	return h.hc.R().
+		SetContext(ctx).
+		SetBodyBytes(body).
+		Post(url)
+}
+
 // Client is the EVA Team API client
 type Client struct {
 	metrics    Metrics
 	baseURL    *url.URL
 	apiToken   string
-	httpClient *req.Client
+	httpClient HTTPClient
 	logger     Logger
 	debug      bool
 }
@@ -70,7 +84,7 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		cfg.Timeout = defaultTimeout
 	}
 
-	httpClient := req.C().
+	hc := req.C().
 		SetTimeout(cfg.Timeout).
 		SetCommonBearerAuthToken(cfg.APIToken).
 		SetCommonHeader("Accept", "application/json").
@@ -79,7 +93,7 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	c := &Client{
 		baseURL:    baseURL.JoinPath(basePath),
 		apiToken:   cfg.APIToken,
-		httpClient: httpClient,
+		httpClient: &httpClient{hc: hc},
 		debug:      cfg.Debug,
 	}
 
@@ -88,6 +102,11 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	}
 
 	return c, nil
+}
+
+// Close closes client
+func (c *Client) Close() error {
+	return nil
 }
 
 func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) error {
@@ -124,6 +143,7 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 				"duration", time.Since(startTime).String(),
 				"error", err,
 			)
+
 			f, err := os.OpenFile("./response.json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 			if err != nil {
 				c.logError(ctx, err.Error())
@@ -141,11 +161,7 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 		return errors.WithMessage(err, "marshal request body")
 	}
 
-	request := c.httpClient.R().
-		SetContext(ctx).
-		SetBodyBytes(reqBodyBytes)
-
-	resp, err := request.Post(reqURL)
+	resp, err := c.httpClient.Post(ctx, reqBodyBytes, reqURL)
 	if err != nil {
 		return errors.WithMessage(err, "http request failed")
 	}
@@ -172,11 +188,6 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 		}
 	}
 
-	return nil
-}
-
-// Close closes client
-func (c *Client) Close() error {
 	return nil
 }
 

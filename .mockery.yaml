@@ -1,0 +1,13 @@
+with-expecter: True
+resolve-type-alias: False
+issue-845-fix: True
+print: True
+packages:
+  "./":
+    config:
+      recursive: True
+      all: True
+      mockname: "{{ .InterfaceName }}"
+      outpkg: "mock{{ .PackageName }}"
+      filename: "{{ .InterfaceName | snakecase }}.go"
+      dir: "{{ .InterfaceDirRelative }}/mock{{ .PackageName }}"

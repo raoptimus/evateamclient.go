@@ -10,20 +10,23 @@ Production-grade Go client for [EVA Team](https://eva.team) JSON-RPC API. Fully 
 
 ✅ **Complete API Coverage**
 - Projects, Sprints, Tasks, Time Logs, Persons
-- Task Links, Epics, Comments
+- Task Links, Epics, Comments, Documents
+- Status History tracking
 - Statistics & aggregations
-- Flexible filtering with kwargs
+- Full CRUD operations (Create, Read, Update, Delete)
 
 ✅ **Production-Ready**
 - Idiomatic Go code (SOLID principles)
 - Comprehensive error handling with stack traces
-- Structured logging support
+- Structured logging support (slog, logrus)
 - Metrics collection (request duration, status codes)
 - Context-first design
+- 85%+ test coverage
 
 ✅ **Developer-Friendly**
-- Type-safe: 100% struct coverage
-- Default fields for common queries
+- Type-safe QueryBuilder with Squirrel
+- Predefined constants (entities, statuses, fields)
+- Default field sets for optimal performance
 - Custom kwargs for advanced filters
 - Option pattern for configuration
 - Full model validation with omitempty tags
@@ -131,11 +134,16 @@ import (
     "github.com/raoptimus/evateamclient"
 )
 
+project, _, err := client.Project(ctx, "project-code", nil)
+if err != nil {
+    log.Fatal(err)
+}
+
 // Build query for time logs in date range
 qb := evateamclient.NewQueryBuilder().
     Select("id", "time_spent", "parent_id", "cmf_owner_id", "cmf_created_at").
     From(evateamclient.EntityTimeLog).
-    Where(sq.Eq{"project_id": "CmfProject:your-project-uuid"}).
+    Where(sq.Eq{"project_id": project.ID}).
     Where(sq.GtOrEq{"cmf_created_at": "2025-01-01"}).
     Where(sq.LtOrEq{"cmf_created_at": "2025-01-31"})
 

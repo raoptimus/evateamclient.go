@@ -177,7 +177,7 @@ func (c *Client) TaskQuery(ctx context.Context, qb *QueryBuilder) (*models.Task,
 //	  Select("id", "code", "name", "priority", "cache_status_type").
 //	  From(evateamclient.EntityTask).
 //	  Where(sq.Eq{"project_id": "Project:uuid"}).
-//	  Where(sq.Eq{"cache_status_type": "OPEN"}).
+//	  Where(sq.Eq{"cache_status_type": evateamclient.StatusTypeOpen}).
 //	  OrderBy("-priority", "name").
 //	  Offset(0).Limit(100)
 //	tasks, meta, err := client.TasksList(ctx, qb)
@@ -221,7 +221,7 @@ func (c *Client) TasksList(
 //	qb := evateamclient.NewQueryBuilder().
 //	  From(evateamclient.EntityTask).
 //	  Where(sq.Eq{"project_id": "Project:uuid"}).
-//	  Where(sq.Eq{"cache_status_type": "OPEN"})
+//	  Where(sq.Eq{"cache_status_type": evateamclient.StatusTypeOpen})
 //	count, err := client.TaskCount(ctx, qb)
 func (c *Client) TaskCount(
 	ctx context.Context,

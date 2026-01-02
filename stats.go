@@ -87,7 +87,7 @@ func (c *Client) ProjectStats(ctx context.Context, projectID string) (*models.Pr
 	qb := NewQueryBuilder().
 		From(EntityTask).
 		Where(sq.Eq{TaskFieldProjectID: projectID}).
-		Where(sq.Eq{TaskFieldCacheStatusType: "OPEN"})
+		Where(sq.Eq{TaskFieldCacheStatusType: StatusTypeOpen})
 	openCount, err := c.TaskCount(ctx, qb)
 	if err == nil {
 		stats.OpenTasks = openCount
