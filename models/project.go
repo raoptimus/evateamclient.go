@@ -1,50 +1,59 @@
 package models
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
-// CmfProject represents the complete object returned in "result" of CmfProject.get/list.
-type CmfProject struct {
-	// Core identification fields (always present)
+// Project represents the complete object returned in "result" of Project.get/list.
+type Project struct {
+	// Core fields (ALWAYS present)
 	ID        string `json:"id"`
 	ClassName string `json:"class_name"`
 	Code      string `json:"code"`
 	Name      string `json:"name"`
+	Text      string `json:"text,omitempty"`
 
-	// Status and workflow fields
-	CacheStatusType string  `json:"cache_status_type,omitempty"`
-	WorkflowType    *string `json:"workflow_type,omitempty"`
-	WorkflowID      string  `json:"workflow_id,omitempty"`
+	// CMF timestamps (PRESENT in response)
+	CMFLockedAt   *time.Time `json:"cmf_locked_at,omitempty"`
+	CMFCreatedAt  time.Time  `json:"cmf_created_at,omitempty"`
+	CMFModifiedAt time.Time  `json:"cmf_modified_at,omitempty"`
+	CMFViewedAt   time.Time  `json:"cmf_viewed_at,omitempty"`
+	CMFDeleted    bool       `json:"cmf_deleted,omitempty"`
+	CMFVersion    string     `json:"cmf_version,omitempty"`
 
-	// Hierarchy and ownership
-	ParentID   *string `json:"parent_id,omitempty"`
-	ProjectID  string  `json:"project_id,omitempty"`
-	CmfOwnerID string  `json:"cmf_owner_id,omitempty"`
-
-	// System flags
-	System         bool `json:"system,omitempty"`
-	ImportOriginal bool `json:"import_original,omitempty"`
-
-	// Permissions and security
+	// Existing fields from current struct
+	CacheStatusType                  string          `json:"cache_status_type,omitempty"`
+	WorkflowType                     *string         `json:"workflow_type,omitempty"`
+	WorkflowID                       string          `json:"workflow_id,omitempty"`
+	ParentID                         *string         `json:"parent_id,omitempty"`
+	CmfOwnerID                       string          `json:"cmf_owner_id,omitempty"`
+	System                           bool            `json:"system,omitempty"`
+	ImportOriginal                   bool            `json:"import_original,omitempty"`
 	SlOwnerLock                      bool            `json:"sl_owner_lock,omitempty"`
 	PermParentOwnerID                *string         `json:"perm_parent_owner_id,omitempty"`
 	PermInheritACLID                 *string         `json:"perm_inherit_acl_id,omitempty"`
 	PermEffectiveACLID               *string         `json:"perm_effective_acl_id,omitempty"`
 	PermSecurityLevelAllowedIDsCache json.RawMessage `json:"perm_security_level_allowed_ids_cache,omitempty"`
+	IsTemplate                       bool            `json:"is_template,omitempty"`
 
-	// Template flag
-	IsTemplate bool `json:"is_template,omitempty"`
+	// Relations
+	Executors  []*Person `json:"executors,omitempty"`
+	Assistants []*Person `json:"cmf_owner_assistants,omitempty"`
+	Admins     []*Person `json:"cmfprojectadmins,omitempty"`
+	Spectators []*Person `json:"spectators,omitempty"`
 }
 
-// CmfProjectGetResponse is the complete response structure for CmfProject.get.
-type CmfProjectGetResponse struct {
-	JSONRPC string     `json:"jsonrpc,omitempty"`
-	Result  CmfProject `json:"result,omitempty"`
-	Meta    CmfMeta    `json:"meta,omitempty"`
+// ProjectGetResponse is the complete response structure for Project.get.
+type ProjectGetResponse struct {
+	JSONRPC string  `json:"jsonrpc,omitempty"`
+	Result  Project `json:"result,omitempty"`
+	Meta    Meta    `json:"meta,omitempty"`
 }
 
-// CmfProjectListResponse is the complete response structure for CmfProject.list.
-type CmfProjectListResponse struct {
-	JSONRPC string       `json:"jsonrpc,omitempty"`
-	Result  []CmfProject `json:"result,omitempty"`
-	Meta    CmfMeta      `json:"meta,omitempty"`
+// ProjectListResponse is the complete response structure for Project.list.
+type ProjectListResponse struct {
+	JSONRPC string    `json:"jsonrpc,omitempty"`
+	Result  []Project `json:"result,omitempty"`
+	Meta    Meta      `json:"meta,omitempty"`
 }

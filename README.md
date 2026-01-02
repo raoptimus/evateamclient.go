@@ -10,20 +10,23 @@ Production-grade Go client for [EVA Team](https://eva.team) JSON-RPC API. Fully 
 
 ✅ **Complete API Coverage**
 - Projects, Sprints, Tasks, Time Logs, Persons
-- Task Links, Epics, Comments
+- Task Links, Epics, Comments, Documents
+- Status History tracking
 - Statistics & aggregations
-- Flexible filtering with kwargs
+- Full CRUD operations (Create, Read, Update, Delete)
 
 ✅ **Production-Ready**
 - Idiomatic Go code (SOLID principles)
 - Comprehensive error handling with stack traces
-- Structured logging support
+- Structured logging support (slog, logrus)
 - Metrics collection (request duration, status codes)
 - Context-first design
+- 85%+ test coverage
 
 ✅ **Developer-Friendly**
-- Type-safe: 100% struct coverage
-- Default fields for common queries
+- Type-safe QueryBuilder with Squirrel
+- Predefined constants (entities, statuses, fields)
+- Default field sets for optimal performance
 - Custom kwargs for advanced filters
 - Option pattern for configuration
 - Full model validation with omitempty tags
@@ -119,8 +122,44 @@ if err != nil {
 }
 
 for _, log := range logs {
-    fmt.Printf("%s: %d min by %s\n", log.Date, log.MinutesSpent, log.UserName)
+    fmt.Printf("%s: %d min by %s\n", log.CreatedAt, log.TimeSpent, log.CmfOwnerID)
 }
+```
+
+### Get Total Actual Labor Costs for a Project Over a Period
+
+```go
+import (
+    sq "github.com/Masterminds/squirrel"
+    "github.com/raoptimus/evateamclient"
+)
+
+project, _, err := client.Project(ctx, "project-code", nil)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Build query for time logs in date range
+qb := evateamclient.NewQueryBuilder().
+    Select("id", "time_spent", "parent_id", "cmf_owner_id", "cmf_created_at").
+    From(evateamclient.EntityTimeLog).
+    Where(sq.Eq{"project_id": project.ID}).
+    Where(sq.GtOrEq{"cmf_created_at": "2025-01-01"}).
+    Where(sq.LtOrEq{"cmf_created_at": "2025-01-31"})
+
+logs, _, err := client.TimeLogsList(ctx, qb)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Calculate total time spent (in minutes)
+var totalMinutes int
+for _, log := range logs {
+    totalMinutes += log.TimeSpent
+}
+
+fmt.Printf("Total time spent: %d hours %d minutes\n",
+    totalMinutes/60, totalMinutes%60)
 ```
 
 ### Advanced: Custom Filters
@@ -128,7 +167,7 @@ for _, log := range logs {
 ```go
 kwargs := map[string]any{
     "filter": [][]any{
-        {"project_id", "==", "CmfProject:uuid-here"},
+        {"project_id", "==", "Project:uuid-here"},
         {"cache_status_type", "==", "OPEN"},
     },
     "order_by": []string{"-cmf_created_at"},
@@ -203,6 +242,16 @@ TaskComments(ctx, taskCode, fields)  // Get task comments
 Comments(ctx, kwargs)                // List with custom filters
 ```
 
+### Status History
+```go
+StatusHistory(ctx, id, fields)              // Get single status change
+TaskStatusHistory(ctx, taskID, fields)      // Get task status changes
+ProjectStatusHistory(ctx, projectID, fields) // Get project status changes
+StatusHistoryList(ctx, qb)                  // List with QueryBuilder
+StatusHistoryCount(ctx, qb)                 // Count status changes
+StatusHistories(ctx, kwargs)                // List with custom filters
+```
+
 ### Statistics
 ```go
 SprintStats(ctx, sprintCode)         // Get sprint statistics
@@ -254,7 +303,7 @@ client, err := evateamclient.NewClient(cfg,
 
 Log output (debug mode):
 ```
-method=POST url=https://api.eva.team/api/?m=CmfProject.get
+method=POST url=https://api.eva.team/api/?m=Project.get
 func=Project requestBody={...} responseBody={...}
 responseStatus=200 duration=145.2ms error=nil
 ```
@@ -280,7 +329,7 @@ client, _ := evateamclient.NewClient(cfg,
 All response models are fully typed with `omitempty` tags:
 
 ```go
-type CmfProject struct {
+type Project struct {
     ID            string  `json:"id"`
     ClassName     string  `json:"class_name"`
     Code          string  `json:"code"`

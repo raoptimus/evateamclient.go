@@ -1,16 +1,28 @@
 package models
 
-// CmfTaskLink represents COMPLETE task relationship.
-type CmfTaskLink struct {
-	ID       string `json:"id"`
-	SourceID string `json:"source_id,omitempty"`
-	TargetID string `json:"target_id,omitempty"`
-	LinkType string `json:"link_type,omitempty"`
+// TaskLink represents task relationship (CmfRelationOption).
+type TaskLink struct {
+	ID            string  `json:"id"`
+	ClassName     string  `json:"class_name,omitempty"`
+	Code          string  `json:"code,omitempty"`
+	Name          *string `json:"name,omitempty"`
+	ParentID      *string `json:"parent_id,omitempty"`
+	ProjectID     *string `json:"project_id,omitempty"`
+	CmfOwnerID    string  `json:"cmf_owner_id,omitempty"`
+	CmfCreatedAt  string  `json:"cmf_created_at,omitempty"`
+	CmfModifiedAt string  `json:"cmf_modified_at,omitempty"`
 }
 
-// CmfTaskLinkListResponse for CmfTaskLink.list.
-type CmfTaskLinkListResponse struct {
-	JSONRPC string        `json:"jsonrpc,omitempty"`
-	Result  []CmfTaskLink `json:"result,omitempty"`
-	Meta    CmfMeta       `json:"meta,omitempty"`
+// TaskLinkResponse for TaskLink.get (single link).
+type TaskLinkResponse struct {
+	JSONRPC string   `json:"jsonrpc,omitempty"`
+	Result  TaskLink `json:"result,omitempty"`
+	Meta    Meta     `json:"meta,omitempty"`
+}
+
+// TaskLinkListResponse for TaskLink.list.
+type TaskLinkListResponse struct {
+	JSONRPC string     `json:"jsonrpc,omitempty"`
+	Result  []TaskLink `json:"result,omitempty"`
+	Meta    Meta       `json:"meta,omitempty"`
 }
