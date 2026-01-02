@@ -2,9 +2,7 @@ package evateamclient
 
 import (
 	"context"
-	"net/http"
 	"net/url"
-	"runtime"
 	"time"
 
 	"github.com/imroc/req/v3"
@@ -12,26 +10,38 @@ import (
 	"github.com/pkg/errors"
 )
 
-const defaultTimeout = 30 * time.Second
-
-var (
-	ErrOptionIsRequired      = errors.New("option is required")
-	ErrUnsupportedHTTPMethod = errors.New("unsupported http method")
+const (
+	defaultTimeout = 30 * time.Second
+	basePath       = "/api/"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
-// Client структура
+type HTTPClient interface {
+	Post(ctx context.Context, body []byte, url string) (*req.Response, error)
+}
+type httpClient struct {
+	hc *req.Client
+}
+
+func (h *httpClient) Post(ctx context.Context, body []byte, url string) (*req.Response, error) {
+	return h.hc.R().
+		SetContext(ctx).
+		SetBodyBytes(body).
+		Post(url)
+}
+
+// Client is the EVA Team API client
 type Client struct {
 	metrics    Metrics
 	baseURL    *url.URL
 	apiToken   string
-	httpClient *req.Client
+	httpClient HTTPClient
 	logger     Logger
 	debug      bool
 }
 
-// Config структура
+// Config holds client configuration
 type Config struct {
 	BaseURL  string
 	APIToken string
@@ -75,16 +85,16 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 		cfg.Timeout = defaultTimeout
 	}
 
-	httpClient := req.C().
+	hc := req.C().
 		SetTimeout(cfg.Timeout).
 		SetCommonBearerAuthToken(cfg.APIToken).
 		SetCommonHeader("Accept", "application/json").
 		SetCommonHeader("Content-Type", "application/json")
 
 	c := &Client{
-		baseURL:    baseURL,
+		baseURL:    baseURL.JoinPath(basePath),
 		apiToken:   cfg.APIToken,
-		httpClient: httpClient,
+		httpClient: &httpClient{hc: hc},
 		debug:      cfg.Debug,
 	}
 
@@ -95,10 +105,24 @@ func NewClient(cfg Config, opts ...Option) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) doRequest(ctx context.Context, method, endpoint string, body any, result any) error {
-	reqURL := c.baseURL.JoinPath(endpoint).String()
-	fname := functionName(2)
+// Close closes client
+func (c *Client) Close() error {
+	return nil
+}
+
+func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) error {
+	if body == nil {
+		return errors.WithStack(ErrBodyIsRequired)
+	}
+	if body.Method == "" {
+		return errors.WithStack(ErrRPCMethodIsRequired)
+	}
+
+	reqURL := c.baseURL.String() + "?m=" + url.QueryEscape(body.Method)
+	const skip = 2
+	fname := functionName(skip)
 	startTime := time.Now()
+
 	var (
 		err           error
 		reqBodyBytes  []byte
@@ -108,11 +132,11 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 
 	defer func() {
 		if c.metrics != nil {
-			c.metrics.RecordRequestDuration(statusCode, method, c.baseURL.Host, fname, time.Since(startTime).Seconds())
+			c.metrics.RecordRequestDuration(statusCode, body.Method, c.baseURL.Host, fname, time.Since(startTime).Seconds())
 		}
 		if c.debug {
-			c.LogDebug(ctx, "Request",
-				"method", method,
+			c.logDebug(ctx, "Request",
+				"method", body.Method,
 				"url", reqURL,
 				"func", fname,
 				"requestBody", string(reqBodyBytes),
@@ -129,26 +153,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		return errors.WithMessage(err, "marshal request body")
 	}
 
-	request := c.httpClient.R().
-		SetContext(ctx).
-		SetBodyBytes(reqBodyBytes)
-
-	var resp *req.Response
-
-	switch method {
-	case http.MethodGet:
-		resp, err = request.Get(reqURL)
-	case http.MethodPost:
-		resp, err = request.Post(reqURL)
-	case http.MethodPut:
-		resp, err = request.Put(reqURL)
-	case http.MethodDelete:
-		resp, err = request.Delete(reqURL)
-	case http.MethodPatch:
-		resp, err = request.Patch(reqURL)
-	default:
-		return errors.WithStack(errors.WithMessage(ErrUnsupportedHTTPMethod, method))
-	}
+	resp, err := c.httpClient.Post(ctx, reqBodyBytes, reqURL)
 	if err != nil {
 		return errors.WithMessage(err, "http request failed")
 	}
@@ -160,6 +165,15 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		return errors.Errorf("API error %d: %s", resp.StatusCode, string(resp.Bytes()))
 	}
 
+	// Check for RPC error in 200 OK response
+	var rpcErr rpcErrorResponse
+	if err := json.Unmarshal(respBodyBytes, &rpcErr); err != nil {
+		return errors.WithMessage(err, "unmarshal rpc error check")
+	}
+	if rpcErr.Error != nil {
+		return errors.WithMessagef(rpcErr.Error, "RPC error %d", rpcErr.Error.Code)
+	}
+
 	if result != nil {
 		if err := json.Unmarshal(respBodyBytes, result); err != nil {
 			return errors.WithMessage(err, "unmarshal response body")
@@ -169,40 +183,8 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 	return nil
 }
 
-func (c *Client) LogDebug(ctx context.Context, msg string, args ...any) {
+func (c *Client) logDebug(ctx context.Context, msg string, args ...any) {
 	if c.logger != nil && c.debug {
 		c.logger.Debug(ctx, msg, args...)
 	}
-}
-
-func (c *Client) LogInfo(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Info(ctx, msg, args...)
-	}
-}
-
-func (c *Client) LogWarn(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Warn(ctx, msg, args...)
-	}
-}
-
-func (c *Client) LogError(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Error(ctx, msg, args...)
-	}
-}
-
-// Close закрывает клиент
-func (c *Client) Close() error {
-	return nil
-}
-
-// functionName вспомогательная функция (БЕЗ Get префикса!)
-func functionName(skip int) string {
-	pc, _, _, ok := runtime.Caller(skip)
-	if !ok {
-		return "unknown"
-	}
-	return runtime.FuncForPC(pc).Name()
 }
