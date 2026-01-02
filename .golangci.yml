@@ -7,9 +7,9 @@ run:
   go: "1.25"
   modules-download-mode: readonly
 issues:
-  max-issues-per-linter: 50      # Ограничить вывод
-  max-same-issues: 3             # Не показывать одну ошибку 100 раз
-  new: false                     # false = проверять весь код, true = только изменения
+  max-issues-per-linter: 50
+  max-same-issues: 3
+  new: false
 linters:
   enable:
     - bidichk
@@ -137,23 +137,13 @@ linters:
       - path: (.+)\.go$
         text: ST1000
     paths:
-      - \.pb\.go$
-      - \.pb\.gw\.go$
-      - consumer/http/docs
+      - doc/
       - mock*
-      - third_party$
-      - builtin$
-      - examples$
 formatters:
   enable:
     - goimports
   exclusions:
     generated: lax
     paths:
-      - \.pb\.go$
-      - \.pb\.gw\.go$
-      - consumer/http/docs
+      - doc/
       - mock*
-      - third_party$
-      - builtin$
-      - examples$
