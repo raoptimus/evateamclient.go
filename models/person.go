@@ -21,8 +21,8 @@ type Person struct {
 	AvatarFilename *string    `json:"avatar_filename,omitempty"`
 
 	// ACL metadata
-	//ACLFields map[string]string `json:"_acl_fields,omitempty"`
-	//ACLObj    string            `json:"_acl_obj,omitempty"`
+	// ACLFields map[string]string `json:"_acl_fields,omitempty"`
+	// ACLObj    string            `json:"_acl_obj,omitempty"`
 }
 
 // PersonResponse for Person.get.

@@ -195,7 +195,7 @@ func (c *Client) TasksList(
 		kwargs["fields"] = DefaultTaskListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -406,7 +406,7 @@ type TaskCreateParams struct {
 //	task, err := client.TaskCreate(ctx, params)
 func (c *Client) TaskCreate(
 	ctx context.Context,
-	params TaskCreateParams,
+	params *TaskCreateParams,
 ) (*models.Task, error) {
 	kwargs := map[string]any{
 		"name":       params.Name,

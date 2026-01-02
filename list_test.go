@@ -206,7 +206,7 @@ func TestClient_ListCreate_Success_ReturnsList(t *testing.T) {
 		Name:     "New Sprint",
 		ParentID: "CmfProject:123",
 	}
-	list, err := client.ListCreate(testCtx, params)
+	list, err := client.ListCreate(testCtx, &params)
 
 	require.NoError(t, err)
 	assert.Equal(t, "CmfList:new-123", list.ID)

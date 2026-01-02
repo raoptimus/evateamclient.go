@@ -128,7 +128,7 @@ func (c *Client) StatusHistoryList(
 		kwargs["fields"] = DefaultStatusHistoryListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

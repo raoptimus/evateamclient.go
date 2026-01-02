@@ -3,7 +3,6 @@ package evateamclient
 import (
 	"context"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/imroc/req/v3"
@@ -11,8 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const defaultTimeout = 30 * time.Second
-const basePath = "/api/"
+const (
+	defaultTimeout = 30 * time.Second
+	basePath       = "/api/"
+)
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
@@ -118,7 +119,8 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 	}
 
 	reqURL := c.baseURL.String() + "?m=" + url.QueryEscape(body.Method)
-	fname := functionName(2)
+	const skip = 2
+	fname := functionName(skip)
 	startTime := time.Now()
 
 	var (
@@ -143,16 +145,6 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 				"duration", time.Since(startTime).String(),
 				"error", err,
 			)
-
-			f, err := os.OpenFile("./response.json", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-			if err != nil {
-				c.logError(ctx, err.Error())
-				return
-			}
-			defer f.Close()
-			if _, err = f.Write(respBodyBytes); err != nil {
-				c.logError(ctx, err.Error())
-			}
 		}
 	}()
 
@@ -194,11 +186,5 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 func (c *Client) logDebug(ctx context.Context, msg string, args ...any) {
 	if c.logger != nil && c.debug {
 		c.logger.Debug(ctx, msg, args...)
-	}
-}
-
-func (c *Client) logError(ctx context.Context, msg string, args ...any) {
-	if c.logger != nil {
-		c.logger.Error(ctx, msg, args...)
 	}
 }

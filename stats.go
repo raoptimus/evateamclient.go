@@ -65,8 +65,8 @@ func (c *Client) SprintStats(ctx context.Context, sprintCode string) (*models.Sp
 	}
 
 	statusCount := make(map[string]int)
-	for _, task := range tasks {
-		statusCount[task.CacheStatusType]++
+	for i := range tasks {
+		statusCount[tasks[i].CacheStatusType]++
 	}
 	stats.TasksByStatus = statusCount
 

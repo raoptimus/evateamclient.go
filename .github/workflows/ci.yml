@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 env:
   GO_VERSION: '1.25'
-  GO_LINT_VERSION: 'v1.64.8'
+  GO_LINT_VERSION: 'v2.7.2'
 
 jobs:
   lint:

@@ -157,7 +157,7 @@ func (c *Client) ListsList(
 		kwargs["fields"] = DefaultListListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,7 +299,7 @@ type ListCreateParams struct {
 //	list, err := client.ListCreate(ctx, params)
 func (c *Client) ListCreate(
 	ctx context.Context,
-	params ListCreateParams,
+	params *ListCreateParams,
 ) (*models.List, error) {
 	kwargs := map[string]any{
 		"name":      params.Name,

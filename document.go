@@ -127,7 +127,7 @@ func (c *Client) DocumentsList(
 		kwargs["fields"] = DefaultDocumentListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

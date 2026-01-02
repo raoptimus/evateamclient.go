@@ -189,7 +189,7 @@ func TestQueryBuilder_ToMethod_ValidEntity_ReturnsListMethod(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.entity, func(t *testing.T) {
 			qb := evateamclient.NewQueryBuilder().From(tt.entity)
-			method, err := qb.ToMethod()
+			method, err := qb.ToMethod(false)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedMethod, method)
 		})
@@ -199,7 +199,7 @@ func TestQueryBuilder_ToMethod_ValidEntity_ReturnsListMethod(t *testing.T) {
 func TestQueryBuilder_ToMethod_NoFrom_ReturnsError(t *testing.T) {
 	qb := evateamclient.NewQueryBuilder().Select("id", "name")
 
-	_, err := qb.ToMethod()
+	_, err := qb.ToMethod(true)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "table name not found")
 }

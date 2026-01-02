@@ -117,7 +117,7 @@ func (c *Client) TaskLinksListQuery(
 		kwargs["fields"] = DefaultTaskLinkListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

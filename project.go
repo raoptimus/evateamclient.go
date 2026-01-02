@@ -108,13 +108,10 @@ func (c *Client) ProjectQuery(
 		kwargs["fields"] = DefaultProjectFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(true)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	// Force .get method for single result
-	method = "CmfProject.get"
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
@@ -156,7 +153,7 @@ func (c *Client) ProjectsList(
 		kwargs["fields"] = DefaultProjectListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -266,7 +263,7 @@ type ProjectCreateParams struct {
 //	project, err := client.ProjectCreate(ctx, params)
 func (c *Client) ProjectCreate(
 	ctx context.Context,
-	params ProjectCreateParams,
+	params *ProjectCreateParams,
 ) (*models.Project, error) {
 	kwargs := map[string]any{
 		"code": params.Code,

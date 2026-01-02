@@ -143,7 +143,7 @@ func TestClient_TaskCreate_Success_ReturnsTask(t *testing.T) {
 		Name:      "New Task",
 		ProjectID: "Project:123",
 	}
-	task, err := client.TaskCreate(testCtx, params)
+	task, err := client.TaskCreate(testCtx, &params)
 
 	require.NoError(t, err)
 	assert.Equal(t, "CmfTask:new-123", task.ID)

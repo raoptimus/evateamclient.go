@@ -122,7 +122,7 @@ func (c *Client) CommentsList(
 		kwargs["fields"] = DefaultCommentListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -165,7 +165,7 @@ func TestClient_ProjectCreate_Success_ReturnsProject(t *testing.T) {
 		Code: "NEWPROJ",
 		Name: "New Project",
 	}
-	project, err := client.ProjectCreate(testCtx, params)
+	project, err := client.ProjectCreate(testCtx, &params)
 
 	require.NoError(t, err)
 	assert.Equal(t, "CmfProject:new-123", project.ID)

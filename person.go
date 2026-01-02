@@ -175,7 +175,7 @@ func (c *Client) PersonsList(
 		kwargs["fields"] = DefaultPersonListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -126,7 +126,7 @@ func (c *Client) TimeLogsList(
 		kwargs["fields"] = DefaultTimeLogListFields
 	}
 
-	method, err := qb.ToMethod()
+	method, err := qb.ToMethod(false)
 	if err != nil {
 		return nil, nil, err
 	}

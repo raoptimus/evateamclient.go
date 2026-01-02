@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Internal function tests for query_builder.go
@@ -90,11 +91,11 @@ func TestConvertSquirrelFilters_EqualityOperator_ReturnsFilter(t *testing.T) {
 
 func TestConvertSquirrelFilters_ComparisonOperators_ReturnsFilters(t *testing.T) {
 	tests := []struct {
-		name         string
-		whereClause  string
-		args         []any
-		expectedOp   string
-		expectedVal  any
+		name        string
+		whereClause string
+		args        []any
+		expectedOp  string
+		expectedVal any
 	}{
 		{"greater than", "WHERE priority > ?", []any{3}, ">", 3},
 		{"greater or equal", "WHERE priority >= ?", []any{3}, ">=", 3},
@@ -122,8 +123,9 @@ func TestParseSquirrelSQL_ExtractsFields(t *testing.T) {
 	sqlStr := "SELECT id, name, code FROM CmfTask"
 	args := []any{}
 
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
 
+	require.NoError(t, err)
 	assert.Equal(t, []string{"id", "name", "code"}, parts.fields)
 	assert.Equal(t, "CmfTask", parts.table)
 }
@@ -132,8 +134,9 @@ func TestParseSquirrelSQL_WildcardFields_ReturnsEmpty(t *testing.T) {
 	sqlStr := "SELECT * FROM CmfTask"
 	args := []any{}
 
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
 
+	require.NoError(t, err)
 	assert.Empty(t, parts.fields)
 	assert.Equal(t, "CmfTask", parts.table)
 }
@@ -142,8 +145,9 @@ func TestParseSquirrelSQL_ExtractsLimitOffset(t *testing.T) {
 	sqlStr := "SELECT * FROM CmfTask LIMIT 50 OFFSET 10"
 	args := []any{}
 
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
 
+	require.NoError(t, err)
 	assert.Equal(t, uint64(50), parts.limit)
 	assert.Equal(t, uint64(10), parts.offset)
 }
@@ -152,8 +156,9 @@ func TestParseSquirrelSQL_ExtractsOrderBy(t *testing.T) {
 	sqlStr := "SELECT * FROM CmfTask ORDER BY priority DESC, name ASC"
 	args := []any{}
 
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
 
+	require.NoError(t, err)
 	assert.Equal(t, []string{"-priority", "name"}, parts.orderBy)
 }
 
@@ -161,8 +166,9 @@ func TestParseSquirrelSQL_CompleteQuery(t *testing.T) {
 	sqlStr := "SELECT id, name FROM CmfTask WHERE status = ? ORDER BY name DESC LIMIT 100 OFFSET 50"
 	args := []any{"OPEN"}
 
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
 
+	require.NoError(t, err)
 	assert.Equal(t, []string{"id", "name"}, parts.fields)
 	assert.Equal(t, "CmfTask", parts.table)
 	assert.NotEmpty(t, parts.filters)

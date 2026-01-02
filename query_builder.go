@@ -117,7 +117,10 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 	}
 
 	// Parse SQL to extract EVA components
-	parts := parseSquirrelSQL(sqlStr, args)
+	parts, err := parseSquirrelSQL(sqlStr, args)
+	if err != nil {
+		return nil, err
+	}
 
 	// Convert WHERE clause to EVA filter
 	if len(parts.filters) > 0 {
@@ -155,8 +158,8 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 }
 
 // ToMethod returns the appropriate EVA API method based on table
-// Example: "CmfProject" -> "CmfProject.list"
-func (qb *QueryBuilder) ToMethod() (string, error) {
+// Example: "CmfProject" -> "CmfProject.list" or "CmfProject.get" if single is true
+func (qb *QueryBuilder) ToMethod(single bool) (string, error) {
 	// Extract table name from Squirrel builder
 	sqlStr, _, err := qb.selectBuilder.ToSql()
 	if err != nil {
@@ -168,6 +171,9 @@ func (qb *QueryBuilder) ToMethod() (string, error) {
 		return "", fmt.Errorf("table name not found in query, use From()")
 	}
 
+	if single {
+		return table + ".get", nil
+	}
 	// Determine method based on query type
 	// If has LIMIT 1 or specific ID filter, use .get, otherwise .list
 	return table + ".list", nil
@@ -191,7 +197,11 @@ func (qb *QueryBuilder) Validate() error {
 
 // String returns human-readable query representation (for debugging)
 func (qb *QueryBuilder) String() string {
-	sqlStr, args, _ := qb.selectBuilder.ToSql()
+	sqlStr, args, err := qb.selectBuilder.ToSql()
+	if err != nil {
+		return fmt.Sprintf("QueryBuilder{err=%v}", err)
+	}
+
 	return fmt.Sprintf("QueryBuilder{sql=%q, args=%v, includeArch=%v, noMeta=%v}",
 		sqlStr, args, qb.includeArch, qb.noMeta)
 }
@@ -208,7 +218,7 @@ type sqlParts struct {
 
 // parseSquirrelSQL converts Squirrel SQL to EVA BQL components
 // This is a simplified parser - production version needs more robust parsing
-func parseSquirrelSQL(sqlStr string, args []any) *sqlParts {
+func parseSquirrelSQL(sqlStr string, args []any) (*sqlParts, error) {
 	parts := &sqlParts{
 		fields:  []string{},
 		filters: []any{},
@@ -247,13 +257,17 @@ func parseSquirrelSQL(sqlStr string, args []any) *sqlParts {
 
 	// Extract LIMIT/OFFSET
 	if limitIdx := strings.Index(sqlStr, "LIMIT "); limitIdx >= 0 {
-		fmt.Sscanf(sqlStr[limitIdx:], "LIMIT %d", &parts.limit)
+		if _, err := fmt.Sscanf(sqlStr[limitIdx:], "LIMIT %d", &parts.limit); err != nil {
+			return nil, err
+		}
 	}
 	if offsetIdx := strings.Index(sqlStr, "OFFSET "); offsetIdx >= 0 {
-		fmt.Sscanf(sqlStr[offsetIdx:], "OFFSET %d", &parts.offset)
+		if _, err := fmt.Sscanf(sqlStr[offsetIdx:], "OFFSET %d", &parts.offset); err != nil {
+			return nil, err
+		}
 	}
 
-	return parts
+	return parts, nil
 }
 
 // extractTableName extracts table name from SQL string
@@ -303,6 +317,7 @@ func convertSquirrelFilters(whereClause string, args []any) []any {
 			// Check for AND
 			if i < len(parts)-2 && strings.Contains(parts[i+1], " AND ") {
 				// Multiple filters, continue
+				continue
 			}
 		}
 	}
@@ -389,6 +404,7 @@ func extractLastWord(s string) string {
 	if len(words) == 0 {
 		return ""
 	}
+
 	return words[len(words)-1]
 }
 
@@ -401,13 +417,14 @@ func parseOrderBy(orderStr string) []string {
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 
-		if strings.HasSuffix(part, " DESC") {
+		switch {
+		case strings.HasSuffix(part, " DESC"):
 			field := strings.TrimSuffix(part, " DESC")
 			result = append(result, "-"+strings.TrimSpace(field))
-		} else if strings.HasSuffix(part, " ASC") {
+		case strings.HasSuffix(part, " ASC"):
 			field := strings.TrimSuffix(part, " ASC")
 			result = append(result, strings.TrimSpace(field))
-		} else {
+		default:
 			result = append(result, part)
 		}
 	}
