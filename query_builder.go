@@ -142,8 +142,9 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 	}
 
 	// Convert LIMIT/OFFSET to EVA slice
+	// EVA API uses Python-like slice: [start, end] where end is the index, not count
 	if parts.limit > 0 || parts.offset > 0 {
-		kwargs["slice"] = []uint64{parts.offset, parts.limit}
+		kwargs["slice"] = []uint64{parts.offset, parts.offset + parts.limit}
 	}
 
 	// EVA-specific flags

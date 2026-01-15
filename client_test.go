@@ -136,10 +136,10 @@ func TestQueryBuilder_ToKwargs_CompleteQuery_ReturnsAllFields(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"-priority", "name"}, orderBy)
 
-	// Check slice
+	// Check slice - EVA API uses [start, end] format, not [start, count]
 	slice, ok := kwargs["slice"].([]uint64)
 	require.True(t, ok)
-	assert.Equal(t, []uint64{10, 50}, slice)
+	assert.Equal(t, []uint64{10, 60}, slice, "slice should be [offset, offset+limit] = [10, 60]")
 
 	// Check flags
 	assert.True(t, kwargs["include_archived"].(bool))
@@ -261,6 +261,61 @@ func TestQueryBuilder_Between_CreatesRangeFilter(t *testing.T) {
 	filter, hasFilter := kwargs["filter"]
 	assert.True(t, hasFilter)
 	assert.NotNil(t, filter)
+}
+
+func TestQueryBuilder_ToKwargs_PaginationScenarios_ReturnsCorrectSlice(t *testing.T) {
+	tests := []struct {
+		name          string
+		offset        uint64
+		limit         uint64
+		expectedSlice []uint64
+		description   string
+	}{
+		{
+			name:          "first page",
+			offset:        0,
+			limit:         100,
+			expectedSlice: []uint64{0, 100},
+			description:   "Page 1: offset=0, limit=100 -> slice=[0, 100]",
+		},
+		{
+			name:          "second page",
+			offset:        100,
+			limit:         100,
+			expectedSlice: []uint64{100, 200},
+			description:   "Page 2: offset=100, limit=100 -> slice=[100, 200]",
+		},
+		{
+			name:          "third page",
+			offset:        200,
+			limit:         100,
+			expectedSlice: []uint64{200, 300},
+			description:   "Page 3: offset=200, limit=100 -> slice=[200, 300]",
+		},
+		{
+			name:          "custom page size",
+			offset:        50,
+			limit:         25,
+			expectedSlice: []uint64{50, 75},
+			description:   "Custom: offset=50, limit=25 -> slice=[50, 75]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			qb := evateamclient.NewQueryBuilder().
+				From(evateamclient.EntityTask).
+				Offset(tt.offset).
+				Limit(tt.limit)
+
+			kwargs, err := qb.ToKwargs()
+			require.NoError(t, err, tt.description)
+
+			slice, ok := kwargs["slice"].([]uint64)
+			require.True(t, ok, "slice should be []uint64")
+			assert.Equal(t, tt.expectedSlice, slice, tt.description)
+		})
+	}
 }
 
 func TestQueryBuilder_String_ReturnsDebugRepresentation(t *testing.T) {
