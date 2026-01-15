@@ -1,6 +1,4 @@
 .idea
 .claude
-CLAUDE.md
-CODE_REVIEW.md
-TODO.md
-doc/quality_assurance_unit_testy_doc-029817.pdf
+*.md
+!README.md
