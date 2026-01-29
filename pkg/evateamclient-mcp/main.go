@@ -35,12 +35,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/urfave/cli/v3"
-
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/raoptimus/evateamclient"
 	"github.com/raoptimus/evateamclient/pkg/evateamclient-mcp/tools"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/raoptimus/evateamclient/slogadapter"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -49,16 +48,8 @@ const (
 	defaultRequestTimeout = 30 * time.Second
 )
 
-// appConfig holds all configuration for the MCP server.
-type appConfig struct {
-	evateamclient.Config
-	MCPDebug bool
-}
-
 func main() {
-	cfg := &appConfig{
-		Config: evateamclient.Config{},
-	}
+	cfg := &evateamclient.Config{}
 
 	cmd := &cli.Command{
 		Name:    serverName,
@@ -84,15 +75,9 @@ func main() {
 			&cli.BoolFlag{
 				Name:        "debug",
 				Aliases:     []string{"d"},
-				Usage:       "Enable debug logging for API requests",
+				Usage:       "Enable debug logging for API requests and MCP server",
 				Sources:     cli.EnvVars("EVA_DEBUG"),
 				Destination: &cfg.Debug,
-			},
-			&cli.BoolFlag{
-				Name:        "mcp-debug",
-				Usage:       "Enable debug logging for MCP server",
-				Sources:     cli.EnvVars("MCP_DEBUG"),
-				Destination: &cfg.MCPDebug,
 			},
 			&cli.DurationFlag{
 				Name:        "timeout",
@@ -102,6 +87,8 @@ func main() {
 				Destination: &cfg.Timeout,
 			},
 		},
+		Writer:    os.Stderr,
+		ErrWriter: os.Stderr,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runServer(ctx, cfg)
 		},
@@ -112,31 +99,38 @@ func main() {
 	}
 }
 
-func runServer(ctx context.Context, cfg *appConfig) error {
+func runServer(ctx context.Context, cfg *evateamclient.Config) error {
+	// Create logger
+	loggerLevel := slog.LevelWarn
+	if cfg.Debug {
+		loggerLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: loggerLevel,
+	}))
+
 	// Create EVA Team client
-	evaClient, err := evateamclient.NewClient(cfg.Config)
+	evaClient, err := evateamclient.NewClient(cfg, evateamclient.WithLogger(slogadapter.New(logger)))
 	if err != nil {
 		return fmt.Errorf("failed to create EVA client: %w", err)
 	}
 	defer evaClient.Close()
 
-	// Create MCP server options
-	var serverOpts *mcp.ServerOptions
-	if cfg.MCPDebug {
-		serverOpts = &mcp.ServerOptions{
-			Logger: slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-				Level: slog.LevelDebug,
-			})),
-		}
-	}
-
 	// Create MCP server
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    serverName,
-		Version: serverVersion,
-	}, serverOpts)
+	server := mcp.NewServer(
+		&mcp.Implementation{
+			Name:    serverName,
+			Version: serverVersion,
+		},
+		&mcp.ServerOptions{
+			Logger: logger,
+			Capabilities: &mcp.ServerCapabilities{
+				Tools: &mcp.ToolCapabilities{ListChanged: true},
+			},
+		},
+	)
 
-	// Register all tools
+	// Register tools before starting the server
 	registry := tools.NewRegistry(evaClient)
 	registry.RegisterAll(server)
 

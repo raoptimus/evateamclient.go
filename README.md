@@ -508,25 +508,31 @@ Or using environment variables:
 
 ### Usage with Claude Code CLI
 
-Add to your Claude Code settings (`~/.config/claude-code/settings.json`):
+**Option 1: Add via CLI (recommended)**
 
-```json
-{
-  "mcpServers": {
-    "evateam": {
-      "command": "evateamclient-mcp",
-      "args": ["--api-url", "https://eva.example.com", "--token", "your-api-token"]
-    }
-  }
-}
+```bash
+# Add to user scope (available in all projects)
+claude mcp add --transport stdio evateam --scope user \
+  -e EVA_API_URL=https://eva.example.com \
+  -e EVA_API_TOKEN=your-api-token \
+  -- evateamclient-mcp
+
+# Or add to project scope (shared via .mcp.json)
+claude mcp add --transport stdio evateam --scope project \
+  -e EVA_API_URL=https://eva.example.com \
+  -e EVA_API_TOKEN=your-api-token \
+  -- evateamclient-mcp
 ```
 
-Or using environment variables:
+**Option 2: Project config file (`.mcp.json` in project root)**
+
+Create `.mcp.json` in your project directory:
 
 ```json
 {
   "mcpServers": {
     "evateam": {
+      "type": "stdio",
       "command": "evateamclient-mcp",
       "env": {
         "EVA_API_URL": "https://eva.example.com",
@@ -535,6 +541,38 @@ Or using environment variables:
     }
   }
 }
+```
+
+> **Note:** Project scope servers require user approval on first use. Claude Code will prompt for confirmation.
+
+**Option 3: Global user config (`~/.claude.json`)**
+
+Add to the `mcpServers` section in your `~/.claude.json`:
+
+```json
+{
+  "projects": {
+    "/your/project/path": {
+      "mcpServers": {
+        "evateam": {
+          "type": "stdio",
+          "command": "evateamclient-mcp",
+          "env": {
+            "EVA_API_URL": "https://eva.example.com",
+            "EVA_API_TOKEN": "your-api-token"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Verify connection:**
+
+```bash
+claude mcp list
+# Should show: evateam: evateamclient-mcp  - ✓ Connected
 ```
 
 ### Available Tools
