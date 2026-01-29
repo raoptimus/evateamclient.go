@@ -69,7 +69,7 @@ func WithMetrics(m Metrics) Option {
 	}
 }
 
-func NewClient(cfg Config, opts ...Option) (*Client, error) {
+func NewClient(cfg *Config, opts ...Option) (*Client, error) {
 	if cfg.BaseURL == "" {
 		return nil, errors.WithMessage(errors.WithStack(ErrOptionIsRequired), "baseURL")
 	}
