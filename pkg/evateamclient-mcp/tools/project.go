@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // ProjectTools provides MCP tool handlers for project operations.
@@ -26,7 +26,7 @@ type ProjectListInput struct {
 }
 
 // ProjectList returns a list of projects.
-func (p *ProjectTools) ProjectList(ctx context.Context, input ProjectListInput) (*ListResult, error) {
+func (p *ProjectTools) ProjectList(ctx context.Context, input *ProjectListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityProject, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("project_list", err)
@@ -43,7 +43,7 @@ func (p *ProjectTools) ProjectList(ctx context.Context, input ProjectListInput) 
 	}
 
 	return &ListResult{
-		Items:   projects,
+		Items:   toAnySlice(projects),
 		HasMore: len(projects) == input.Limit && input.Limit > 0,
 	}, nil
 }
@@ -61,22 +61,23 @@ type ProjectGetInput struct {
 }
 
 // ProjectGet retrieves a single project by code or ID.
-func (p *ProjectTools) ProjectGet(ctx context.Context, input ProjectGetInput) (any, error) {
+func (p *ProjectTools) ProjectGet(ctx context.Context, input *ProjectGetInput) (any, error) {
 	var qb *evateamclient.QueryBuilder
 
-	if input.Code != "" {
+	switch {
+	case input.Code != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityProject).
 			Where(sq.Eq{"code": input.Code}).
 			Limit(1)
-	} else if input.ID != "" {
+	case input.ID != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityProject).
 			Where(sq.Eq{"id": input.ID}).
 			Limit(1)
-	} else {
+	default:
 		return nil, WrapError("project_get", ErrInvalidInput)
 	}
 
@@ -99,7 +100,7 @@ type ProjectCreateInput struct {
 }
 
 // ProjectCreate creates a new project.
-func (p *ProjectTools) ProjectCreate(ctx context.Context, input ProjectCreateInput) (any, error) {
+func (p *ProjectTools) ProjectCreate(ctx context.Context, input *ProjectCreateInput) (any, error) {
 	params := &evateamclient.ProjectCreateParams{
 		Code:       input.Code,
 		Name:       input.Name,

@@ -5,8 +5,8 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/raoptimus/evateamclient"
-	"github.com/raoptimus/evateamclient/mockevateamclient"
+	"github.com/raoptimus/evateamclient.go"
+	"github.com/raoptimus/evateamclient.go/mockevateamclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ func TestNewClient_ValidConfig_ReturnsClient(t *testing.T) {
 		Timeout:  30 * time.Second,
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 }
@@ -31,7 +31,7 @@ func TestNewClient_EmptyBaseURL_ReturnsError(t *testing.T) {
 		APIToken: "test-token",
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "baseURL")
@@ -43,7 +43,7 @@ func TestNewClient_EmptyAPIToken_ReturnsError(t *testing.T) {
 		APIToken: "",
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	assert.Error(t, err)
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "APIToken")
@@ -55,7 +55,7 @@ func TestNewClient_InvalidBaseURL_ReturnsError(t *testing.T) {
 		APIToken: "test-token",
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	assert.Error(t, err)
 	assert.Nil(t, client)
 }
@@ -67,7 +67,7 @@ func TestNewClient_ZeroTimeout_UsesDefault(t *testing.T) {
 		Timeout:  0,
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	require.NoError(t, err)
 	require.NotNil(t, client)
 }
@@ -81,7 +81,7 @@ func TestNewClient_WithOptions_AppliesAll(t *testing.T) {
 	mockLogger := mockevateamclient.NewLogger(t)
 	mockMetrics := mockevateamclient.NewMetrics(t)
 
-	client, err := evateamclient.NewClient(cfg,
+	client, err := evateamclient.NewClient(&cfg,
 		evateamclient.WithLogger(mockLogger),
 		evateamclient.WithDebug(true),
 		evateamclient.WithMetrics(mockMetrics),
@@ -97,7 +97,7 @@ func TestClient_Close_ReturnsNoError(t *testing.T) {
 		APIToken: "test-token",
 	}
 
-	client, err := evateamclient.NewClient(cfg)
+	client, err := evateamclient.NewClient(&cfg)
 	require.NoError(t, err)
 
 	err = client.Close()

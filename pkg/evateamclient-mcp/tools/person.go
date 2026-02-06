@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // PersonTools provides MCP tool handlers for person operations.
@@ -20,12 +20,12 @@ func NewPersonTools(client *evateamclient.Client) *PersonTools {
 // PersonListInput represents input for eva_person_list tool.
 type PersonListInput struct {
 	QueryInput
-	OnVacation   *bool `json:"on_vacation,omitempty"`
-	DoesNotWork  *bool `json:"does_not_work,omitempty"`
+	OnVacation  *bool `json:"on_vacation,omitempty"`
+	DoesNotWork *bool `json:"does_not_work,omitempty"`
 }
 
 // PersonList returns a list of persons.
-func (p *PersonTools) PersonList(ctx context.Context, input PersonListInput) (*ListResult, error) {
+func (p *PersonTools) PersonList(ctx context.Context, input *PersonListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityPerson, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("person_list", err)
@@ -44,7 +44,7 @@ func (p *PersonTools) PersonList(ctx context.Context, input PersonListInput) (*L
 	}
 
 	return &ListResult{
-		Items:   persons,
+		Items:   toAnySlice(persons),
 		HasMore: len(persons) == input.Limit && input.Limit > 0,
 	}, nil
 }

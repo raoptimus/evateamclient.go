@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // TimeLogTools provides MCP tool handlers for time log operations.
@@ -26,7 +26,7 @@ type TimeLogListInput struct {
 }
 
 // TimeLogList returns a list of time log entries.
-func (t *TimeLogTools) TimeLogList(ctx context.Context, input TimeLogListInput) (*ListResult, error) {
+func (t *TimeLogTools) TimeLogList(ctx context.Context, input *TimeLogListInput) (*ListResult, error) {
 	// For project filter, use kwargs (dot notation for nested field)
 	if input.ProjectID != "" {
 		kwargs := BuildKwargs(&input.QueryInput)
@@ -38,7 +38,7 @@ func (t *TimeLogTools) TimeLogList(ctx context.Context, input TimeLogListInput) 
 		}
 
 		return &ListResult{
-			Items:   logs,
+			Items:   toAnySlice(logs),
 			HasMore: len(logs) == input.Limit && input.Limit > 0,
 		}, nil
 	}
@@ -61,7 +61,7 @@ func (t *TimeLogTools) TimeLogList(ctx context.Context, input TimeLogListInput) 
 	}
 
 	return &ListResult{
-		Items:   logs,
+		Items:   toAnySlice(logs),
 		HasMore: len(logs) == input.Limit && input.Limit > 0,
 	}, nil
 }

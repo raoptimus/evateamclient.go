@@ -1,4 +1,4 @@
-module github.com/raoptimus/evateamclient
+module github.com/raoptimus/evateamclient.go
 
 go 1.25
 

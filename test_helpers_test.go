@@ -37,7 +37,7 @@ func newTestClient(t *testing.T) (*Client, *mockHTTPClient) {
 		APIToken: "test-token",
 	}
 
-	client, err := NewClient(cfg)
+	client, err := NewClient(&cfg)
 	require.NoError(t, err)
 
 	mockHTTP := &mockHTTPClient{}

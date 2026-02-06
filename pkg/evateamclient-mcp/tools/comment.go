@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // CommentTools provides MCP tool handlers for comment operations.
@@ -26,7 +26,7 @@ type CommentListInput struct {
 }
 
 // CommentList returns a list of comments.
-func (c *CommentTools) CommentList(ctx context.Context, input CommentListInput) (*ListResult, error) {
+func (c *CommentTools) CommentList(ctx context.Context, input *CommentListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityComment, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("comment_list", err)
@@ -48,7 +48,7 @@ func (c *CommentTools) CommentList(ctx context.Context, input CommentListInput) 
 	}
 
 	return &ListResult{
-		Items:   comments,
+		Items:   toAnySlice(comments),
 		HasMore: len(comments) == input.Limit && input.Limit > 0,
 	}, nil
 }
@@ -60,7 +60,7 @@ type CommentGetInput struct {
 }
 
 // CommentGet retrieves a single comment.
-func (c *CommentTools) CommentGet(ctx context.Context, input CommentGetInput) (any, error) {
+func (c *CommentTools) CommentGet(ctx context.Context, input *CommentGetInput) (any, error) {
 	if input.ID == "" {
 		return nil, WrapError("comment_get", ErrInvalidInput)
 	}
@@ -80,7 +80,7 @@ type CommentCreateInput struct {
 }
 
 // CommentCreate creates a new comment.
-func (c *CommentTools) CommentCreate(ctx context.Context, input CommentCreateInput) (any, error) {
+func (c *CommentTools) CommentCreate(ctx context.Context, input *CommentCreateInput) (any, error) {
 	if input.TaskID == "" || input.Text == "" {
 		return nil, WrapError("comment_create", ErrInvalidInput)
 	}
@@ -100,7 +100,7 @@ type CommentUpdateInput struct {
 }
 
 // CommentUpdate updates an existing comment.
-func (c *CommentTools) CommentUpdate(ctx context.Context, input CommentUpdateInput) (any, error) {
+func (c *CommentTools) CommentUpdate(ctx context.Context, input *CommentUpdateInput) (any, error) {
 	if input.ID == "" || input.Text == "" {
 		return nil, WrapError("comment_update", ErrInvalidInput)
 	}
@@ -119,7 +119,7 @@ type CommentDeleteInput struct {
 }
 
 // CommentDelete deletes a comment.
-func (c *CommentTools) CommentDelete(ctx context.Context, input CommentDeleteInput) (any, error) {
+func (c *CommentTools) CommentDelete(ctx context.Context, input *CommentDeleteInput) (any, error) {
 	if input.ID == "" {
 		return nil, WrapError("comment_delete", ErrInvalidInput)
 	}
@@ -140,7 +140,7 @@ type CommentCountInput struct {
 }
 
 // CommentCount counts comments.
-func (c *CommentTools) CommentCount(ctx context.Context, input CommentCountInput) (*CountResult, error) {
+func (c *CommentTools) CommentCount(ctx context.Context, input *CommentCountInput) (*CountResult, error) {
 	qb := evateamclient.NewQueryBuilder().From(evateamclient.EntityComment)
 
 	if input.TaskID != "" {

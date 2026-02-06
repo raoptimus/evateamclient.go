@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // StatusHistoryTools provides MCP tool handlers for status history operations.
@@ -25,7 +25,7 @@ type StatusHistoryListInput struct {
 }
 
 // StatusHistoryList returns a list of status history entries.
-func (s *StatusHistoryTools) StatusHistoryList(ctx context.Context, input StatusHistoryListInput) (*ListResult, error) {
+func (s *StatusHistoryTools) StatusHistoryList(ctx context.Context, input *StatusHistoryListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityStatusHistory, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("statushistory_list", err)
@@ -49,7 +49,7 @@ func (s *StatusHistoryTools) StatusHistoryList(ctx context.Context, input Status
 	}
 
 	return &ListResult{
-		Items:   histories,
+		Items:   toAnySlice(histories),
 		HasMore: len(histories) == input.Limit && input.Limit > 0,
 	}, nil
 }

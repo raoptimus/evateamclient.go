@@ -31,7 +31,7 @@ type QueryInput struct {
 
 // ListResult wraps list response with metadata.
 type ListResult struct {
-	Items      any   `json:"items"`
+	Items      []any `json:"items"`
 	TotalCount int64 `json:"total_count,omitempty"`
 	HasMore    bool  `json:"has_more,omitempty"`
 }

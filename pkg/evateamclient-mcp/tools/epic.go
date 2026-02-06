@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // EpicTools provides MCP tool handlers for epic operations.
@@ -23,15 +23,17 @@ type EpicListInput struct {
 }
 
 // EpicList returns a list of epics.
-func (e *EpicTools) EpicList(ctx context.Context, input EpicListInput) (*ListResult, error) {
+func (e *EpicTools) EpicList(ctx context.Context, input *EpicListInput) (*ListResult, error) {
 	// Build kwargs with logic_type.code filter
 	kwargs := BuildKwargs(&input.QueryInput)
 
 	var filters [][]any
 	if existingFilter, ok := kwargs["filter"].([][]any); ok {
 		filters = existingFilter
-	} else if singleFilter, ok := kwargs["filter"].([]any); ok {
-		filters = [][]any{singleFilter}
+	} else {
+		if singleFilter, ok := kwargs["filter"].([]any); ok {
+			filters = [][]any{singleFilter}
+		}
 	}
 
 	// Add epic filter
@@ -54,7 +56,7 @@ func (e *EpicTools) EpicList(ctx context.Context, input EpicListInput) (*ListRes
 	}
 
 	return &ListResult{
-		Items:   epics,
+		Items:   toAnySlice(epics),
 		HasMore: len(epics) == input.Limit && input.Limit > 0,
 	}, nil
 }

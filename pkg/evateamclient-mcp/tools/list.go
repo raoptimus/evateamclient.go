@@ -4,7 +4,12 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
+)
+
+const (
+	listTypeSprint  = "sprint"
+	listTypeRelease = "release"
 )
 
 // ListTools provides MCP tool handlers for list (sprint/release) operations.
@@ -32,7 +37,7 @@ type ListListInput struct {
 }
 
 // ListList returns a list of lists (sprints/releases).
-func (l *ListTools) ListList(ctx context.Context, input ListListInput) (*ListResult, error) {
+func (l *ListTools) ListList(ctx context.Context, input *ListListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityList, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("list_list", err)
@@ -49,9 +54,10 @@ func (l *ListTools) ListList(ctx context.Context, input ListListInput) (*ListRes
 	}
 
 	// Add type filter (sprint/release based on code prefix)
-	if input.Type == "sprint" {
+	switch input.Type {
+	case listTypeSprint:
 		qb = qb.Where(sq.Like{"code": evateamclient.ListCodePrefixSprint + "%"})
-	} else if input.Type == "release" {
+	case listTypeRelease:
 		qb = qb.Where(sq.Like{"code": evateamclient.ListCodePrefixRelease + "%"})
 	}
 
@@ -61,7 +67,7 @@ func (l *ListTools) ListList(ctx context.Context, input ListListInput) (*ListRes
 	}
 
 	return &ListResult{
-		Items:   lists,
+		Items:   toAnySlice(lists),
 		HasMore: len(lists) == input.Limit && input.Limit > 0,
 	}, nil
 }
@@ -79,22 +85,23 @@ type ListGetInput struct {
 }
 
 // ListGet retrieves a single list by code or ID.
-func (l *ListTools) ListGet(ctx context.Context, input ListGetInput) (any, error) {
+func (l *ListTools) ListGet(ctx context.Context, input *ListGetInput) (any, error) {
 	var qb *evateamclient.QueryBuilder
 
-	if input.Code != "" {
+	switch {
+	case input.Code != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityList).
 			Where(sq.Eq{"code": input.Code}).
 			Limit(1)
-	} else if input.ID != "" {
+	case input.ID != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityList).
 			Where(sq.Eq{"id": input.ID}).
 			Limit(1)
-	} else {
+	default:
 		return nil, WrapError("list_get", ErrInvalidInput)
 	}
 
@@ -117,7 +124,7 @@ type ListCreateInput struct {
 }
 
 // ListCreate creates a new list (sprint/release).
-func (l *ListTools) ListCreate(ctx context.Context, input ListCreateInput) (any, error) {
+func (l *ListTools) ListCreate(ctx context.Context, input *ListCreateInput) (any, error) {
 	params := &evateamclient.ListCreateParams{
 		Name:      input.Name,
 		ParentID:  input.ParentID,
@@ -201,7 +208,7 @@ type ListCountInput struct {
 }
 
 // ListCount counts lists.
-func (l *ListTools) ListCount(ctx context.Context, input ListCountInput) (*CountResult, error) {
+func (l *ListTools) ListCount(ctx context.Context, input *ListCountInput) (*CountResult, error) {
 	qb := evateamclient.NewQueryBuilder().From(evateamclient.EntityList)
 
 	if input.ProjectID != "" {
@@ -210,9 +217,11 @@ func (l *ListTools) ListCount(ctx context.Context, input ListCountInput) (*Count
 	if input.StatusType != "" {
 		qb = qb.Where(sq.Eq{"cache_status_type": input.StatusType})
 	}
-	if input.Type == "sprint" {
+
+	switch input.Type {
+	case listTypeSprint:
 		qb = qb.Where(sq.Like{"code": evateamclient.ListCodePrefixSprint + "%"})
-	} else if input.Type == "release" {
+	case listTypeRelease:
 		qb = qb.Where(sq.Like{"code": evateamclient.ListCodePrefixRelease + "%"})
 	}
 
@@ -225,23 +234,23 @@ func (l *ListTools) ListCount(ctx context.Context, input ListCountInput) (*Count
 }
 
 // SprintList is an alias for ListList with type=sprint.
-func (l *ListTools) SprintList(ctx context.Context, input ListListInput) (*ListResult, error) {
-	input.Type = "sprint"
+func (l *ListTools) SprintList(ctx context.Context, input *ListListInput) (*ListResult, error) {
+	input.Type = listTypeSprint
 	return l.ListList(ctx, input)
 }
 
 // SprintGet is an alias for ListGet (validates sprint prefix).
-func (l *ListTools) SprintGet(ctx context.Context, input ListGetInput) (any, error) {
+func (l *ListTools) SprintGet(ctx context.Context, input *ListGetInput) (any, error) {
 	return l.ListGet(ctx, input)
 }
 
 // ReleaseList is an alias for ListList with type=release.
-func (l *ListTools) ReleaseList(ctx context.Context, input ListListInput) (*ListResult, error) {
-	input.Type = "release"
+func (l *ListTools) ReleaseList(ctx context.Context, input *ListListInput) (*ListResult, error) {
+	input.Type = listTypeRelease
 	return l.ListList(ctx, input)
 }
 
 // ReleaseGet is an alias for ListGet (validates release prefix).
-func (l *ListTools) ReleaseGet(ctx context.Context, input ListGetInput) (any, error) {
+func (l *ListTools) ReleaseGet(ctx context.Context, input *ListGetInput) (any, error) {
 	return l.ListGet(ctx, input)
 }

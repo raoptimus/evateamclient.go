@@ -3,7 +3,7 @@
 package mockevateamclient
 
 import (
-	evateamclient "github.com/raoptimus/evateamclient"
+	evateamclient "github.com/raoptimus/evateamclient.go"
 	mock "github.com/stretchr/testify/mock"
 )
 

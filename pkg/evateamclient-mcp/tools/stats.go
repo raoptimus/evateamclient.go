@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	evateamclient "github.com/raoptimus/evateamclient"
+	evateamclient "github.com/raoptimus/evateamclient.go"
 )
 
 // StatsTools provides MCP tool handlers for statistics operations.

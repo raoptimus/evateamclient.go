@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/raoptimus/evateamclient/pkg/evateamclient-mcp/tools"
+	"github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp/tools"
 	"github.com/stretchr/testify/assert"
 )
 

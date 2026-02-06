@@ -4,8 +4,10 @@ import (
 	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
+
+const defaultPaginationLimit = 100 // Default limit for pagination
 
 // BuildQuery converts QueryInput to evateamclient.QueryBuilder.
 func BuildQuery(entity string, input *QueryInput) (*evateamclient.QueryBuilder, error) {
@@ -111,7 +113,7 @@ func BuildKwargs(input *QueryInput) map[string]any {
 		start := input.Offset
 		end := input.Offset + input.Limit
 		if input.Limit == 0 {
-			end = start + 100 // default limit
+			end = start + defaultPaginationLimit // default limit
 		}
 		kwargs["slice"] = []int{start, end}
 	}
@@ -122,4 +124,13 @@ func BuildKwargs(input *QueryInput) map[string]any {
 	}
 
 	return kwargs
+}
+
+// toAnySlice converts typed slice to []any
+func toAnySlice[T any](items []T) []any {
+	result := make([]any, len(items))
+	for i, item := range items {
+		result[i] = item
+	}
+	return result
 }

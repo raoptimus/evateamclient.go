@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // TaskTools provides MCP tool handlers for task operations.
@@ -32,10 +32,13 @@ type TaskListInput struct {
 
 	// Optional responsible person filter
 	ResponsibleID string `json:"responsible_id,omitempty"`
+
+	// Optional logic type ID filter (e.g., task type like "Target", "Epic", etc.)
+	LogicTypeID string `json:"logic_type_id,omitempty"`
 }
 
 // TaskList returns a list of tasks matching filters.
-func (t *TaskTools) TaskList(ctx context.Context, input TaskListInput) (*ListResult, error) {
+func (t *TaskTools) TaskList(ctx context.Context, input *TaskListInput) (*ListResult, error) {
 	// Build kwargs for complex filters
 	kwargs := BuildKwargs(&input.QueryInput)
 
@@ -43,8 +46,10 @@ func (t *TaskTools) TaskList(ctx context.Context, input TaskListInput) (*ListRes
 	var filters [][]any
 	if existingFilter, ok := kwargs["filter"].([][]any); ok {
 		filters = existingFilter
-	} else if singleFilter, ok := kwargs["filter"].([]any); ok {
-		filters = [][]any{singleFilter}
+	} else {
+		if singleFilter, ok := kwargs["filter"].([]any); ok {
+			filters = [][]any{singleFilter}
+		}
 	}
 
 	if input.ProjectID != "" {
@@ -55,6 +60,9 @@ func (t *TaskTools) TaskList(ctx context.Context, input TaskListInput) (*ListRes
 	}
 	if input.ResponsibleID != "" {
 		filters = append(filters, []any{"responsible_id", "==", input.ResponsibleID})
+	}
+	if input.LogicTypeID != "" {
+		filters = append(filters, []any{"logic_type_id", "==", input.LogicTypeID})
 	}
 
 	// Sprint uses "contains" operator
@@ -79,7 +87,7 @@ func (t *TaskTools) TaskList(ctx context.Context, input TaskListInput) (*ListRes
 	}
 
 	return &ListResult{
-		Items:   tasks,
+		Items:   toAnySlice(tasks),
 		HasMore: len(tasks) == input.Limit && input.Limit > 0,
 	}, nil
 }
@@ -97,22 +105,23 @@ type TaskGetInput struct {
 }
 
 // TaskGet retrieves a single task by code or ID.
-func (t *TaskTools) TaskGet(ctx context.Context, input TaskGetInput) (any, error) {
+func (t *TaskTools) TaskGet(ctx context.Context, input *TaskGetInput) (any, error) {
 	var qb *evateamclient.QueryBuilder
 
-	if input.Code != "" {
+	switch {
+	case input.Code != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityTask).
 			Where(sq.Eq{"code": input.Code}).
 			Limit(1)
-	} else if input.ID != "" {
+	case input.ID != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityTask).
 			Where(sq.Eq{"id": input.ID}).
 			Limit(1)
-	} else {
+	default:
 		return nil, WrapError("task_get", ErrInvalidInput)
 	}
 
@@ -140,7 +149,7 @@ type TaskCreateInput struct {
 }
 
 // TaskCreate creates a new task.
-func (t *TaskTools) TaskCreate(ctx context.Context, input TaskCreateInput) (any, error) {
+func (t *TaskTools) TaskCreate(ctx context.Context, input *TaskCreateInput) (any, error) {
 	params := &evateamclient.TaskCreateParams{
 		Name:        input.Name,
 		ProjectID:   input.ProjectID,

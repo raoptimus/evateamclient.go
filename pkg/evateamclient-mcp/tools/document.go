@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // DocumentTools provides MCP tool handlers for document operations.
@@ -24,7 +24,7 @@ type DocumentListInput struct {
 }
 
 // DocumentList returns a list of documents.
-func (d *DocumentTools) DocumentList(ctx context.Context, input DocumentListInput) (*ListResult, error) {
+func (d *DocumentTools) DocumentList(ctx context.Context, input *DocumentListInput) (*ListResult, error) {
 	qb, err := BuildQuery(evateamclient.EntityDocument, &input.QueryInput)
 	if err != nil {
 		return nil, WrapError("document_list", err)
@@ -40,7 +40,7 @@ func (d *DocumentTools) DocumentList(ctx context.Context, input DocumentListInpu
 	}
 
 	return &ListResult{
-		Items:   docs,
+		Items:   toAnySlice(docs),
 		HasMore: len(docs) == input.Limit && input.Limit > 0,
 	}, nil
 }
@@ -56,19 +56,20 @@ type DocumentGetInput struct {
 func (d *DocumentTools) DocumentGet(ctx context.Context, input DocumentGetInput) (any, error) {
 	var qb *evateamclient.QueryBuilder
 
-	if input.Code != "" {
+	switch {
+	case input.Code != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityDocument).
 			Where(sq.Eq{"code": input.Code}).
 			Limit(1)
-	} else if input.ID != "" {
+	case input.ID != "":
 		qb = evateamclient.NewQueryBuilder().
 			Select(input.Fields...).
 			From(evateamclient.EntityDocument).
 			Where(sq.Eq{"id": input.ID}).
 			Limit(1)
-	} else {
+	default:
 		return nil, WrapError("document_get", ErrInvalidInput)
 	}
 

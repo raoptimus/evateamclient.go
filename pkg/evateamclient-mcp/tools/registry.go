@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	evateamclient "github.com/raoptimus/evateamclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // Registry holds all tool handlers.
@@ -59,18 +59,22 @@ func wrapHandler[In, Out any](handler func(context.Context, In) (Out, error)) fu
 		if jsonErr != nil {
 			var zero Out
 			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: "Failed to serialize result: " + jsonErr.Error()},
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: "Failed to serialize result: " + jsonErr.Error()},
+					},
+					IsError: true,
 				},
-				IsError: true,
-			}, zero, nil
+				zero,
+				jsonErr
 		}
 
 		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: string(jsonBytes)},
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: string(jsonBytes)},
+				},
 			},
-		}, result, nil
+			result,
+			nil
 	}
 }
 

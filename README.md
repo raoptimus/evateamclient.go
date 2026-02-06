@@ -47,7 +47,7 @@ package main
 import (
     "context"
     "log/slog"
-    "github.com/raoptimus/evateamclient"
+    "github.com/raoptimus/evateamclient.go"
 )
 
 func main() {
@@ -131,7 +131,7 @@ for _, log := range logs {
 ```go
 import (
     sq "github.com/Masterminds/squirrel"
-    "github.com/raoptimus/evateamclient"
+    "github.com/raoptimus/evateamclient.go"
 )
 
 project, _, err := client.Project(ctx, "project-code", nil)
@@ -434,7 +434,7 @@ This library includes an MCP (Model Context Protocol) server for integrating EVA
 ### Installation
 
 ```bash
-go install github.com/raoptimus/evateamclient/pkg/evateamclient-mcp@latest
+go install github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp@latest
 ```
 
 ### Configuration

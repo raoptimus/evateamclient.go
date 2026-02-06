@@ -3,8 +3,8 @@ package tools_test
 import (
 	"testing"
 
-	evateamclient "github.com/raoptimus/evateamclient"
-	"github.com/raoptimus/evateamclient/pkg/evateamclient-mcp/tools"
+	evateamclient "github.com/raoptimus/evateamclient.go"
+	"github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

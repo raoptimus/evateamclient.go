@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	evateamclient "github.com/raoptimus/evateamclient"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // TaskLinkTools provides MCP tool handlers for task link operations.
@@ -24,7 +24,7 @@ type TaskLinkListInput struct {
 }
 
 // TaskLinkList returns a list of task links.
-func (t *TaskLinkTools) TaskLinkList(ctx context.Context, input TaskLinkListInput) (*ListResult, error) {
+func (t *TaskLinkTools) TaskLinkList(ctx context.Context, input *TaskLinkListInput) (*ListResult, error) {
 	if input.TaskID == "" {
 		// List all links with custom query
 		qb, err := BuildQuery(evateamclient.EntityRelation, &input.QueryInput)
@@ -38,7 +38,7 @@ func (t *TaskLinkTools) TaskLinkList(ctx context.Context, input TaskLinkListInpu
 		}
 
 		return &ListResult{
-			Items:   links,
+			Items:   toAnySlice(links),
 			HasMore: len(links) == input.Limit && input.Limit > 0,
 		}, nil
 	}
@@ -69,15 +69,6 @@ func (t *TaskLinkTools) TaskLinkList(ctx context.Context, input TaskLinkListInpu
 		Items:   links,
 		HasMore: false,
 	}, nil
-}
-
-// toAnySlice converts typed slice to []any
-func toAnySlice[T any](items []T) []any {
-	result := make([]any, len(items))
-	for i, item := range items {
-		result[i] = item
-	}
-	return result
 }
 
 // TaskLinkGetInput represents input for eva_tasklink_get tool.

@@ -36,9 +36,9 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/raoptimus/evateamclient"
-	"github.com/raoptimus/evateamclient/pkg/evateamclient-mcp/tools"
-	"github.com/raoptimus/evateamclient/slogadapter"
+	"github.com/raoptimus/evateamclient.go"
+	"github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp/tools"
+	"github.com/raoptimus/evateamclient.go/slogadapter"
 	"github.com/urfave/cli/v3"
 )
 
