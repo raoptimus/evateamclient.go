@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/raoptimus/evateamclient/models"
+	"github.com/raoptimus/evateamclient.go/models"
 )
 
 // Epic is a CmfTask with logic_type.code = "task.epic"

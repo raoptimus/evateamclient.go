@@ -47,7 +47,7 @@ package main
 import (
     "context"
     "log/slog"
-    "github.com/raoptimus/evateamclient"
+    "github.com/raoptimus/evateamclient.go"
 )
 
 func main() {
@@ -131,7 +131,7 @@ for _, log := range logs {
 ```go
 import (
     sq "github.com/Masterminds/squirrel"
-    "github.com/raoptimus/evateamclient"
+    "github.com/raoptimus/evateamclient.go"
 )
 
 project, _, err := client.Project(ctx, "project-code", nil)
@@ -426,6 +426,184 @@ This library follows [Semantic Versioning](https://semver.org/lang/en/):
 - `v1.x.x`: Production stable
 - Breaking changes trigger major version bump
 - New features trigger minor version bump
+
+## MCP Server
+
+This library includes an MCP (Model Context Protocol) server for integrating EVA Team with AI assistants like Claude.
+
+### Installation
+
+```bash
+go install github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp@latest
+```
+
+### Configuration
+
+Configuration can be provided via CLI flags or environment variables. Flags take precedence over environment variables.
+
+**CLI Flags:**
+
+```bash
+evateamclient-mcp --api-url="https://eva.example.com" --token="your-api-token"
+
+# With all options
+evateamclient-mcp \
+  --api-url="https://eva.example.com" \
+  --token="your-api-token" \
+  --debug \
+  --mcp-debug \
+  --timeout=60s
+```
+
+| Flag | Short | Environment | Description |
+|------|-------|-------------|-------------|
+| `--api-url` | `-u` | `EVA_API_URL` | EVA Team API URL (required) |
+| `--token` | `-t` | `EVA_API_TOKEN` | API authentication token (required) |
+| `--debug` | `-d` | `EVA_DEBUG` | Enable API request logging |
+| `--mcp-debug` | | `MCP_DEBUG` | Enable MCP server debug logging |
+| `--timeout` | | `EVA_TIMEOUT` | Request timeout (default: 30s) |
+
+**Environment Variables:**
+
+```bash
+export EVA_API_URL="https://eva.example.com"
+export EVA_API_TOKEN="your-api-token"
+
+# Optional
+export EVA_DEBUG="true"      # Enable API request logging
+export MCP_DEBUG="true"      # Enable MCP server debug logging
+export EVA_TIMEOUT="60s"     # Request timeout (default: 30s)
+```
+
+### Usage with Claude Desktop
+
+Add to your Claude Desktop configuration (`~/.config/claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "evateam": {
+      "command": "evateamclient-mcp",
+      "args": ["--api-url", "https://eva.example.com", "--token", "your-api-token"]
+    }
+  }
+}
+```
+
+Or using environment variables:
+
+```json
+{
+  "mcpServers": {
+    "evateam": {
+      "command": "evateamclient-mcp",
+      "env": {
+        "EVA_API_URL": "https://eva.example.com",
+        "EVA_API_TOKEN": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+### Usage with Claude Code CLI
+
+**Option 1: Add via CLI (recommended)**
+
+```bash
+# Add to user scope (available in all projects)
+claude mcp add --transport stdio evateam --scope user \
+  -e EVA_API_URL=https://eva.example.com \
+  -e EVA_API_TOKEN=your-api-token \
+  -- evateamclient-mcp
+
+# Or add to project scope (shared via .mcp.json)
+claude mcp add --transport stdio evateam --scope project \
+  -e EVA_API_URL=https://eva.example.com \
+  -e EVA_API_TOKEN=your-api-token \
+  -- evateamclient-mcp
+```
+
+**Option 2: Project config file (`.mcp.json` in project root)**
+
+Create `.mcp.json` in your project directory:
+
+```json
+{
+  "mcpServers": {
+    "evateam": {
+      "type": "stdio",
+      "command": "evateamclient-mcp",
+      "env": {
+        "EVA_API_URL": "https://eva.example.com",
+        "EVA_API_TOKEN": "your-api-token"
+      }
+    }
+  }
+}
+```
+
+> **Note:** Project scope servers require user approval on first use. Claude Code will prompt for confirmation.
+
+**Option 3: Global user config (`~/.claude.json`)**
+
+Add to the `mcpServers` section in your `~/.claude.json`:
+
+```json
+{
+  "projects": {
+    "/your/project/path": {
+      "mcpServers": {
+        "evateam": {
+          "type": "stdio",
+          "command": "evateamclient-mcp",
+          "env": {
+            "EVA_API_URL": "https://eva.example.com",
+            "EVA_API_TOKEN": "your-api-token"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Verify connection:**
+
+```bash
+claude mcp list
+# Should show: evateam: evateamclient-mcp  - ✓ Connected
+```
+
+### Available Tools
+
+The MCP server provides 55+ tools for EVA Team operations:
+
+| Resource | Tools |
+|----------|-------|
+| **Task** | `eva_task_list`, `eva_task_get`, `eva_task_create`, `eva_task_update`, `eva_task_delete`, `eva_task_update_status`, `eva_task_archive`, `eva_task_count` |
+| **Project** | `eva_project_list`, `eva_project_get`, `eva_project_create`, `eva_project_update`, `eva_project_delete`, `eva_project_add_executor`, `eva_project_remove_executor`, `eva_project_count` |
+| **List** | `eva_list_list`, `eva_list_get`, `eva_list_create`, `eva_list_update`, `eva_list_close`, `eva_list_delete`, `eva_list_count` |
+| **Sprint** | `eva_sprint_list`, `eva_sprint_get` |
+| **Release** | `eva_release_list`, `eva_release_get` |
+| **Document** | `eva_document_list`, `eva_document_get`, `eva_document_create`, `eva_document_update`, `eva_document_delete`, `eva_document_count` |
+| **Person** | `eva_person_list`, `eva_person_get`, `eva_person_count` |
+| **TimeLog** | `eva_timelog_list`, `eva_timelog_get`, `eva_timelog_create`, `eva_timelog_update`, `eva_timelog_delete`, `eva_timelog_count` |
+| **Comment** | `eva_comment_list`, `eva_comment_get`, `eva_comment_create`, `eva_comment_update`, `eva_comment_delete`, `eva_comment_count` |
+| **Epic** | `eva_epic_list`, `eva_epic_get`, `eva_epic_count` |
+| **TaskLink** | `eva_tasklink_list`, `eva_tasklink_get`, `eva_tasklink_create`, `eva_tasklink_delete`, `eva_tasklink_count` |
+| **StatusHistory** | `eva_statushistory_list`, `eva_statushistory_get`, `eva_statushistory_count` |
+| **Stats** | `eva_stats_project`, `eva_stats_sprint` |
+
+### Example Prompts
+
+Once configured, you can ask Claude:
+
+- "Show me all open tasks in project MYPROJ"
+- "Create a new task in project MYPROJ with name 'Fix login bug'"
+- "Get statistics for sprint SPR-001543"
+- "List all comments on task MYPROJ-123"
+- "Log 2 hours on task MYPROJ-456"
 
 ## Support
 
