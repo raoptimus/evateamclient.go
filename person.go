@@ -4,7 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
-	"github.com/raoptimus/evateamclient/models"
+	"github.com/raoptimus/evateamclient.go/models"
 )
 
 // Person field constants for type-safe queries
