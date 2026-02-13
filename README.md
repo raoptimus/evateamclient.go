@@ -256,6 +256,7 @@ StatusHistories(ctx, kwargs)                // List with custom filters
 ```go
 SprintStats(ctx, sprintCode)         // Get sprint statistics
 ProjectStats(ctx, projectCode)       // Get project statistics
+SprintExecutorsKPI(ctx, params)      // KPI of closed sprint tasks by executor
 TasksCount(ctx, kwargs)              // Count tasks with filters
 ProjectTasksCount(ctx, projectCode)  // Count project tasks
 SprintTasksCount(ctx, sprintCode)    // Count sprint tasks
@@ -593,7 +594,7 @@ The MCP server provides 55+ tools for EVA Team operations:
 | **Epic** | `eva_epic_list`, `eva_epic_get`, `eva_epic_count` |
 | **TaskLink** | `eva_tasklink_list`, `eva_tasklink_get`, `eva_tasklink_create`, `eva_tasklink_delete`, `eva_tasklink_count` |
 | **StatusHistory** | `eva_statushistory_list`, `eva_statushistory_get`, `eva_statushistory_count` |
-| **Stats** | `eva_stats_project`, `eva_stats_sprint` |
+| **Stats** | `eva_stats_project`, `eva_stats_sprint`, `eva_stats_timespent`, `eva_stats_sprint_executors_kpi` |
 
 ### Example Prompts
 
@@ -621,4 +622,3 @@ BSD 3-Clause License - see LICENSE file for details
 3. Commit changes (`git commit -am 'Add amazing feature'`)
 4. Push to branch (`git push origin feature/amazing`)
 5. Open Pull Request
-

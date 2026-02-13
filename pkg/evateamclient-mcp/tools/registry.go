@@ -397,4 +397,14 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 		Name:        "eva_stats_sprint",
 		Description: "Get sprint statistics (total tasks, tasks by status)",
 	}, wrapHandler(r.Stats.SprintStats))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_stats_timespent",
+		Description: "Get time spent report grouped by person and task",
+	}, wrapHandler(r.Stats.TimeSpentStats))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_stats_sprint_executors_kpi",
+		Description: "Get KPI of closed sprint tasks by executor (excluding tasks added during sprint)",
+	}, wrapHandler(r.Stats.SprintExecutorsKPI))
 }

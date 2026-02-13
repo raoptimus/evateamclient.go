@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -108,7 +109,7 @@ func (c *Client) List(
 //	  Where(sq.Eq{"code": "SPR-001543"})
 //	list, meta, err := client.ListQuery(ctx, qb)
 func (c *Client) ListQuery(ctx context.Context, qb *QueryBuilder) (*models.List, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+	kwargs, err := qb.From(EntityList).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -171,7 +172,7 @@ func (c *Client) ListsList(
 
 	var resp models.ListListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "get lists")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -242,7 +243,7 @@ func (c *Client) OpenProjectLists(
 		Select(fields...).
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
-		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
+		Where(sq.Eq{ListFieldCacheStatusType: models.StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }
@@ -445,7 +446,7 @@ func (c *Client) OpenProjectSprints(
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
 		Where(sq.Like{ListFieldCode: ListCodePrefixSprint + "%"}).
-		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
+		Where(sq.Eq{ListFieldCacheStatusType: models.StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }
@@ -499,7 +500,7 @@ func (c *Client) OpenProjectReleases(
 		From(EntityList).
 		Where(sq.Eq{ListFieldProjectID: projectID}).
 		Where(sq.Like{ListFieldCode: ListCodePrefixRelease + "%"}).
-		Where(sq.Eq{ListFieldCacheStatusType: StatusTypeOpen})
+		Where(sq.Eq{ListFieldCacheStatusType: models.StatusTypeOpen})
 
 	return c.ListsList(ctx, qb)
 }

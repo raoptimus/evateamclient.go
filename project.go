@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -122,7 +123,7 @@ func (c *Client) ProjectQuery(
 
 	var resp models.ProjectGetResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "get project")
 	}
 
 	return &resp.Result, &resp.Meta, nil

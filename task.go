@@ -185,7 +185,7 @@ func (c *Client) TasksList(
 	ctx context.Context,
 	qb *QueryBuilder,
 ) ([]models.Task, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+	kwargs, err := qb.From(EntityTask).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}

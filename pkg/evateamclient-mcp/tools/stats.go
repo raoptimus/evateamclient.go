@@ -2,8 +2,9 @@ package tools
 
 import (
 	"context"
+	"time"
 
-	evateamclient "github.com/raoptimus/evateamclient.go"
+	"github.com/raoptimus/evateamclient.go"
 )
 
 // StatsTools provides MCP tool handlers for statistics operations.
@@ -52,4 +53,56 @@ func (s *StatsTools) SprintStats(ctx context.Context, input SprintStatsInput) (a
 	}
 
 	return stats, nil
+}
+
+// TimeSpentStatsInput represents input for eva_stats_timespent tool.
+type TimeSpentStatsInput struct {
+	ProjectID string `json:"project_id"`
+	DateFrom  string `json:"date_from,omitempty"`
+	DateTo    string `json:"date_to,omitempty"`
+}
+
+// TimeSpentStats retrieves time spent report grouped by person and task.
+func (s *StatsTools) TimeSpentStats(ctx context.Context, input TimeSpentStatsInput) (any, error) {
+	if input.ProjectID == "" {
+		return nil, WrapError("stats_timespent", ErrInvalidInput)
+	}
+
+	stats, err := s.client.TimeSpentStats(ctx, evateamclient.TimeSpentStatsParams{
+		ProjectID: input.ProjectID,
+		DateFrom:  input.DateFrom,
+		DateTo:    input.DateTo,
+	})
+	if err != nil {
+		return nil, WrapError("stats_timespent", err)
+	}
+
+	return stats, nil
+}
+
+// SprintExecutorsKPIInput represents input for eva_stats_sprint_executors_kpi tool.
+type SprintExecutorsKPIInput struct {
+	ProjectCode     string    `json:"project_code,omitempty"`
+	SprintCode      string    `json:"sprint_code"`
+	SprintStartDate time.Time `json:"sprint_start_date,omitempty"`
+	SprintEndDate   time.Time `json:"sprint_end_date,omitempty"`
+}
+
+// SprintExecutorsKPI retrieves KPI report for closed sprint tasks grouped by executor.
+func (s *StatsTools) SprintExecutorsKPI(ctx context.Context, input SprintExecutorsKPIInput) (any, error) {
+	if input.SprintCode == "" {
+		return nil, WrapError("stats_sprint_executors_kpi", ErrInvalidInput)
+	}
+
+	report, err := s.client.SprintExecutorsKPI(ctx, evateamclient.SprintExecutorsKPIParams{
+		SprintCode:      input.SprintCode,
+		ProjectCode:     input.ProjectCode,
+		SprintStartDate: input.SprintStartDate,
+		SprintEndDate:   input.SprintEndDate,
+	})
+	if err != nil {
+		return nil, WrapError("stats_sprint_executors_kpi", err)
+	}
+
+	return report, nil
 }

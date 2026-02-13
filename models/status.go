@@ -1,4 +1,4 @@
-package evateamclient
+package models
 
 // Status type constants for cache_status_type field
 const (

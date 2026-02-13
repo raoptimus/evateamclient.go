@@ -1,5 +1,10 @@
 package models
 
+import (
+	"strings"
+	"time"
+)
+
 // Task represents COMPLETE task object from Task.get/list.
 type Task struct {
 	// Core identification
@@ -33,12 +38,12 @@ type Task struct {
 	Spectators  []*Person    `json:"spectators,omitempty"`
 
 	// System Fields
-	CmfLockedAt   *string `json:"cmf_locked_at,omitempty"`
-	CmfCreatedAt  string  `json:"cmf_created_at,omitempty"`
-	CmfModifiedAt string  `json:"cmf_modified_at,omitempty"`
-	CmfViewedAt   *string `json:"cmf_viewed_at,omitempty"`
-	CmfDeleted    bool    `json:"cmf_deleted,omitempty"`
-	CmfVersion    string  `json:"cmf_version,omitempty"`
+	CmfLockedAt   time.Time `json:"cmf_locked_at,omitempty"`
+	CmfCreatedAt  time.Time `json:"cmf_created_at,omitempty"`
+	CmfModifiedAt time.Time `json:"cmf_modified_at,omitempty"`
+	CmfViewedAt   time.Time `json:"cmf_viewed_at,omitempty"`
+	CmfDeleted    bool      `json:"cmf_deleted,omitempty"`
+	CmfVersion    string    `json:"cmf_version,omitempty"`
 
 	// Import Data
 	ImportRawJSON any `json:"import_raw_json,omitempty"`
@@ -51,21 +56,21 @@ type Task struct {
 	IsFlagged bool   `json:"is_flagged,omitempty"`
 
 	// Dates
-	PlanStartDate  *string `json:"plan_start_date,omitempty"`
-	PlanEndDate    *string `json:"plan_end_date,omitempty"`
-	PeriodInterval *string `json:"period_interval,omitempty"`
-	PeriodNextDate *string `json:"period_next_date,omitempty"`
+	PlanStartDate  time.Time `json:"plan_start_date,omitempty"`
+	PlanEndDate    time.Time `json:"plan_end_date,omitempty"`
+	PeriodInterval *string   `json:"period_interval,omitempty"`
+	PeriodNextDate *string   `json:"period_next_date,omitempty"`
 
 	// Status Tracking
-	StatusModifiedAt      *string `json:"status_modified_at,omitempty"`
-	StatusInProgressStart *string `json:"status_in_progress_start,omitempty"`
-	StatusInProgressEnd   *string `json:"status_in_progress_end,omitempty"`
-	StatusReviewAt        *string `json:"status_review_at,omitempty"`
-	StatusClosedAt        *string `json:"status_closed_at,omitempty"`
+	StatusModifiedAt      time.Time `json:"status_modified_at,omitempty"`
+	StatusInProgressStart time.Time `json:"status_in_progress_start,omitempty"`
+	StatusInProgressEnd   time.Time `json:"status_in_progress_end,omitempty"`
+	StatusReviewAt        time.Time `json:"status_review_at,omitempty"`
+	StatusClosedAt        time.Time `json:"status_closed_at,omitempty"`
 
 	// Additional Flags
-	ArchiveDate *string `json:"archiveddate,omitempty"`
-	ResultText  string  `json:"result_text,omitempty"`
+	ArchiveDate time.Time `json:"archiveddate,omitempty"`
+	ResultText  string    `json:"result_text,omitempty"`
 
 	// System fields
 	CacheChildTasksCount int    `json:"cache_child_tasks_count"`
@@ -74,6 +79,14 @@ type Task struct {
 	EpicID               string `json:"epic_id,omitempty"`
 	LogicTypeID          string `json:"logic_type_id,omitempty"`
 	ResponsibleID        string `json:"responsible_id,omitempty"`
+}
+
+func (t Task) IsClosedBetween(since, till time.Time) bool {
+	if !strings.EqualFold(t.CacheStatusType, StatusTypeClosed) || t.StatusClosedAt.IsZero() {
+		return false
+	}
+
+	return t.StatusClosedAt.After(since) && t.StatusClosedAt.Before(till)
 }
 
 // TaskResponse for Task.get (single task).

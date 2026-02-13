@@ -1,6 +1,14 @@
 package models
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
+
+const (
+	ListSprintPrefix  = "SPR-"
+	ListReleasePrefix = "REL-"
+)
 
 // ListParent represents nested parent project info in list response.
 type ListParent struct {
@@ -29,8 +37,8 @@ type List struct {
 	ProjectID         string      `json:"project_id,omitempty"`
 	CmfOwnerID        string      `json:"cmf_owner_id,omitempty"`
 	WorkflowID        string      `json:"workflow_id,omitempty"`
-	StartDate         *string     `json:"start_date,omitempty"`
-	EndDate           *string     `json:"end_date,omitempty"`
+	StartDate         time.Time   `json:"start_date,omitempty"`
+	EndDate           time.Time   `json:"end_date,omitempty"`
 	Goal              string      `json:"goal,omitempty"`
 	Text              string      `json:"text,omitempty"`
 	System            bool        `json:"system,omitempty"`
@@ -39,12 +47,12 @@ type List struct {
 
 // IsSprint returns true if this list is a sprint (code starts with "SPR-").
 func (l *List) IsSprint() bool {
-	return strings.HasPrefix(l.Code, "SPR-")
+	return strings.HasPrefix(l.Code, ListSprintPrefix)
 }
 
 // IsRelease returns true if this list is a release (code starts with "REL-").
 func (l *List) IsRelease() bool {
-	return strings.HasPrefix(l.Code, "REL-")
+	return strings.HasPrefix(l.Code, ListReleasePrefix)
 }
 
 // ListResponse for CmfList.get (single list).
