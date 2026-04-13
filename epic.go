@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -113,7 +121,7 @@ func (c *Client) ProjectEpics(
 	ctx context.Context,
 	projectID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultEpicListFields
 	}
@@ -149,7 +157,7 @@ func (c *Client) EpicTasks(
 	ctx context.Context,
 	epicID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityTask).
@@ -170,7 +178,7 @@ func (c *Client) EpicTasks(
 func (c *Client) Epics(
 	ctx context.Context,
 	kwargs map[string]any,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}

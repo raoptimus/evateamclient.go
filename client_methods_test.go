@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -70,6 +78,47 @@ func TestClient_Task_HTTPError_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "connection refused")
 	assert.Nil(t, task)
 	assert.Nil(t, meta)
+}
+
+func TestClient_Task_WithStatus_ReturnsStatusObject(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	respBody := `{
+		"jsonrpc": "2.2",
+		"result": {
+			"id": "CmfTask:123",
+			"code": "TASK-001",
+			"name": "Test Task",
+			"cache_status_type": "IN_PROGRESS",
+			"status_id": "CmfStatus:c15a55da-a06c-11f0-ac94-426cd0cdd161",
+			"status": {
+				"id": "CmfStatus:c15a55da-a06c-11f0-ac94-426cd0cdd161",
+				"class_name": "CmfStatus",
+				"name": "Reviewing",
+				"code": "STC-000008",
+				"status_type": "IN_PROGRESS",
+				"color": "#ff9400",
+				"workflow_id": "CmfWorkflow:a17f1e82-9f8e-11f0-a189-fa963d7e8f22"
+			}
+		},
+		"meta": {"total": 1}
+	}`
+
+	mockHTTP.response = mockResponse(http.StatusOK, respBody)
+
+	task, _, err := client.Task(testCtx, "TASK-001", nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, task)
+	assert.Equal(t, "CmfStatus:c15a55da-a06c-11f0-ac94-426cd0cdd161", task.StatusID)
+	require.NotNil(t, task.Status)
+	assert.Equal(t, "CmfStatus:c15a55da-a06c-11f0-ac94-426cd0cdd161", task.Status.ID)
+	assert.Equal(t, "CmfStatus", task.Status.ClassName)
+	assert.Equal(t, "Reviewing", task.Status.Name)
+	assert.Equal(t, "STC-000008", task.Status.Code)
+	assert.Equal(t, "IN_PROGRESS", task.Status.StatusType)
+	assert.Equal(t, "#ff9400", task.Status.Color)
+	assert.Equal(t, "CmfWorkflow:a17f1e82-9f8e-11f0-a189-fa963d7e8f22", task.Status.WorkflowID)
 }
 
 func TestClient_TasksList_Success_ReturnsTasks(t *testing.T) {

@@ -15,10 +15,16 @@ build: ## Build binary
 	CGO_ENABLED=0 go build ${LDFLAGS} ./...
 
 test: ## Run unit tests
-	@go test -failfast -race -v ./...
+	@go test -failfast -race -v -skip '^TestIntegration' ./...
+
+test-integration: ## Run integration tests
+	@go test -failfast -race -v -run '^TestIntegration' ./...
 
 lint: ## Run linter
 	@golangci-lint run --timeout 5m
+
+install-mcp: ## Install evateamclient-mcp binary
+	@go install ${LDFLAGS} ./pkg/evateamclient-mcp
 
 genmock: ## Generate all mocks
 	@mockery

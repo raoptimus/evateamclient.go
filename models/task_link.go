@@ -1,16 +1,26 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package models
+
+import "time"
 
 // TaskLink represents task relationship (CmfRelationOption).
 type TaskLink struct {
-	ID            string  `json:"id"`
-	ClassName     string  `json:"class_name,omitempty"`
-	Code          string  `json:"code,omitempty"`
-	Name          *string `json:"name,omitempty"`
-	ParentID      *string `json:"parent_id,omitempty"`
-	ProjectID     *string `json:"project_id,omitempty"`
-	CmfOwnerID    string  `json:"cmf_owner_id,omitempty"`
-	CmfCreatedAt  string  `json:"cmf_created_at,omitempty"`
-	CmfModifiedAt string  `json:"cmf_modified_at,omitempty"`
+	ID            string    `json:"id"`
+	ClassName     string    `json:"class_name,omitempty"`
+	Code          string    `json:"code,omitempty"`
+	Name          *string   `json:"name,omitempty"`
+	ParentID      *string   `json:"parent_id,omitempty"`
+	ProjectID     *string   `json:"project_id,omitempty"`
+	CmfOwnerID    string    `json:"cmf_owner_id,omitempty"`
+	CmfCreatedAt  time.Time `json:"cmf_created_at,omitempty"`
+	CmfModifiedAt time.Time `json:"cmf_modified_at,omitempty"`
 }
 
 // TaskLinkResponse for TaskLink.get (single link).

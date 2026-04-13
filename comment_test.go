@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -24,7 +32,7 @@ func TestClient_Comment_Success_ReturnsComment(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.get")
+		return assert.Contains(t, url, "m=CmfComment.get")
 	}
 
 	comment, meta, err := client.Comment(testCtx, "Comment:123", nil)
@@ -84,7 +92,7 @@ func TestClient_CommentsList_Success_ReturnsComments(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.list")
+		return assert.Contains(t, url, "m=CmfComment.list")
 	}
 
 	qb := NewQueryBuilder().From(EntityComment)
@@ -190,7 +198,7 @@ func TestClient_Comments_Success_ReturnsComments(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.list")
+		return assert.Contains(t, url, "m=CmfComment.list")
 	}
 
 	comments, meta, err := client.Comments(testCtx, nil)

@@ -1,9 +1,18 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -122,7 +131,7 @@ func (c *Client) ProjectQuery(
 
 	var resp models.ProjectGetResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get project")
 	}
 
 	return &resp.Result, &resp.Meta, nil
@@ -167,7 +176,7 @@ func (c *Client) ProjectsList(
 
 	var resp models.ProjectListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get projects")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -202,7 +211,7 @@ func (c *Client) ProjectCount(
 	}
 
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return 0, err
+		return 0, errors.WithMessage(err, "failed to get project count")
 	}
 
 	return resp.Result, nil
@@ -235,7 +244,7 @@ func (c *Client) Projects(
 
 	var resp models.ProjectListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get projects")
 	}
 
 	return resp.Result, &resp.Meta, nil

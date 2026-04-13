@@ -1,9 +1,18 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -37,6 +46,8 @@ const (
 	TaskFieldLogicTypeID   = "logic_type_id"
 	TaskFieldCmfOwnerID    = "cmf_owner_id"
 	TaskFieldWorkflowID    = "workflow_id"
+	TaskFieldStatusID      = "status_id"
+	TaskFieldStatus        = "status"
 
 	// Relations (arrays)
 	TaskFieldLists       = "lists" // sprints
@@ -101,6 +112,7 @@ var (
 		TaskFieldAgileStoryPoints,
 		TaskFieldComponents,
 		TaskFieldLogicType,
+		TaskFieldStatusID,
 	}
 
 	// DefaultTaskListFields - optimized for LIST queries (lighter payload)
@@ -115,6 +127,7 @@ var (
 		TaskFieldResponsibleID,
 		TaskFieldEpicID,
 		TaskFieldAgileStoryPoints,
+		TaskFieldStatusID,
 	}
 )
 
@@ -145,7 +158,7 @@ func (c *Client) Task(
 //	  Where(sq.Eq{"code": "PROJ-123"})
 //	task, meta, err := client.TaskQuery(ctx, qb)
 func (c *Client) TaskQuery(ctx context.Context, qb *QueryBuilder) (*models.Task, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+	kwargs, err := qb.From(EntityTask).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -184,8 +197,8 @@ func (c *Client) TaskQuery(ctx context.Context, qb *QueryBuilder) (*models.Task,
 func (c *Client) TasksList(
 	ctx context.Context,
 	qb *QueryBuilder,
-) ([]models.Task, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+) ([]models.TaskBrowse, *models.Meta, error) {
+	kwargs, err := qb.From(EntityTask).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -209,7 +222,7 @@ func (c *Client) TasksList(
 
 	var resp models.TaskListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get tasks")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -245,7 +258,7 @@ func (c *Client) TaskCount(
 	}
 
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return 0, err
+		return 0, errors.WithMessage(err, "failed to get task count")
 	}
 
 	return resp.Result, nil
@@ -259,7 +272,7 @@ func (c *Client) ProjectTasks(
 	ctx context.Context,
 	projectID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityTask).
@@ -276,7 +289,7 @@ func (c *Client) SprintTasks(
 	ctx context.Context,
 	sprintCode string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTaskListFields
 	}
@@ -284,7 +297,7 @@ func (c *Client) SprintTasks(
 	// Note: "contains" operator is EVA-specific, not standard SQL
 	// Using raw kwargs for this special case
 	kwargs := map[string]any{
-		"filter": []any{TaskFieldLists, "contains", sprintCode},
+		"filter": []any{TaskFieldLists, "IN", []string{sprintCode}},
 		"fields": fields,
 	}
 
@@ -300,7 +313,7 @@ func (c *Client) PersonTasks(
 	ctx context.Context,
 	userID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityTask).
@@ -317,7 +330,7 @@ func (c *Client) PersonTasksAsExecutor(
 	ctx context.Context,
 	userID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultTaskListFields
 	}
@@ -340,7 +353,7 @@ func (c *Client) PersonProjectTasks(
 	projectID,
 	userID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityTask).
@@ -354,7 +367,7 @@ func (c *Client) PersonProjectTasks(
 
 // Tasks retrieves tasks with custom filters (backward compatible, deprecated)
 // Recommended: use TasksList with NewQueryBuilder() instead
-func (c *Client) Tasks(ctx context.Context, kwargs map[string]any) ([]models.Task, *models.Meta, error) {
+func (c *Client) Tasks(ctx context.Context, kwargs map[string]any) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}

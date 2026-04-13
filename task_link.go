@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -198,16 +206,16 @@ func (c *Client) TaskLinks(
 	seen := make(map[string]bool)
 	var result []models.TaskLink
 
-	for _, link := range outgoing {
-		if !seen[link.ID] {
-			seen[link.ID] = true
-			result = append(result, link)
+	for i := range outgoing {
+		if !seen[outgoing[i].ID] {
+			seen[outgoing[i].ID] = true
+			result = append(result, outgoing[i])
 		}
 	}
-	for _, link := range incoming {
-		if !seen[link.ID] {
-			seen[link.ID] = true
-			result = append(result, link)
+	for i := range incoming {
+		if !seen[incoming[i].ID] {
+			seen[incoming[i].ID] = true
+			result = append(result, incoming[i])
 		}
 	}
 
