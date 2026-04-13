@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStats(t *testing.T) {
+func TestIntegration_Stats(t *testing.T) {
 	c, err := NewClient(&Config{
 		BaseURL:  os.Getenv("EVA_API_URL"),
 		APIToken: os.Getenv("EVA_API_TOKEN"),
