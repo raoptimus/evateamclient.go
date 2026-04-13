@@ -38,6 +38,8 @@ const (
 	TaskFieldLogicTypeID   = "logic_type_id"
 	TaskFieldCmfOwnerID    = "cmf_owner_id"
 	TaskFieldWorkflowID    = "workflow_id"
+	TaskFieldStatusID      = "status_id"
+	TaskFieldStatus        = "status"
 
 	// Relations (arrays)
 	TaskFieldLists       = "lists" // sprints
@@ -102,6 +104,7 @@ var (
 		TaskFieldAgileStoryPoints,
 		TaskFieldComponents,
 		TaskFieldLogicType,
+		TaskFieldStatusID,
 	}
 
 	// DefaultTaskListFields - optimized for LIST queries (lighter payload)
@@ -116,6 +119,7 @@ var (
 		TaskFieldResponsibleID,
 		TaskFieldEpicID,
 		TaskFieldAgileStoryPoints,
+		TaskFieldStatusID,
 	}
 )
 

@@ -11,3 +11,17 @@ const (
 	// StatusTypeClosed represents a closed status
 	StatusTypeClosed = "CLOSED"
 )
+
+// Status represents a CmfStatus workflow sub-status.
+type Status struct {
+	ID         string  `json:"id"`
+	ClassName  string  `json:"class_name"`
+	Name       string  `json:"name"`
+	Code       string  `json:"code"`
+	StatusType string  `json:"status_type"`
+	Color      string  `json:"color,omitempty"`
+	WorkflowID string  `json:"workflow_id,omitempty"`
+	ProjectID  *string `json:"project_id,omitempty"`
+	ParentID   *string `json:"parent_id,omitempty"`
+	CmfOwnerID string  `json:"cmf_owner_id,omitempty"`
+}

@@ -21,6 +21,8 @@ type TaskBrowse struct {
 	ParentID             string    `json:"parent_id,omitempty"` // ParentID - project id
 	CmfOwnerID           string    `json:"cmf_owner_id"`
 	WorkflowID           string    `json:"workflow_id"`
+	StatusID             string    `json:"status_id,omitempty"`
+	Status               *Status   `json:"status,omitempty"`
 
 	StatusClosedAt time.Time `json:"status_closed_at,omitempty"`
 }
