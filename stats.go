@@ -153,10 +153,7 @@ func (c *Client) TimeSpentStats(ctx context.Context, params TimeSpentStatsParams
 
 	personIDs := collectUniquePersonIDs(logs)
 
-	personNames, err := c.fetchPersonNames(ctx, personIDs)
-	if err != nil {
-		return nil, err
-	}
+	personNames := c.fetchPersonNames(ctx, personIDs)
 
 	return aggregateTimeSpent(logs, personNames, params), nil
 }
@@ -169,7 +166,7 @@ func (c *Client) TimeSpentStats(ctx context.Context, params TimeSpentStatsParams
 // - Tasks appeared during sprint are excluded:
 //   - if BaselineTaskIDs provided: only those IDs are counted
 //   - otherwise: task.cmf_created_at must be <= sprint.start_date
-func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsKPIParams) (*models.SprintExecutorsKPI, error) {
+func (c *Client) SprintExecutorsKPI(ctx context.Context, params *SprintExecutorsKPIParams) (*models.SprintExecutorsKPI, error) {
 	if params.ProjectCode == "" {
 		return nil, errors.New("project_code is required")
 	}
@@ -293,10 +290,7 @@ func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsK
 	}
 	sort.Strings(personIDs)
 
-	personNames, err := c.fetchPersonNames(ctx, personIDs)
-	if err != nil {
-		return nil, err
-	}
+	personNames := c.fetchPersonNames(ctx, personIDs)
 
 	report := &models.SprintExecutorsKPI{
 		ProjectCode:      params.ProjectCode,
@@ -467,7 +461,7 @@ func collectUniquePersonIDs(logs []models.TimeLog) []string {
 	return ids
 }
 
-func (c *Client) fetchPersonNames(ctx context.Context, ids []string) (map[string]string, error) {
+func (c *Client) fetchPersonNames(ctx context.Context, ids []string) map[string]string {
 	names := make(map[string]string, len(ids))
 
 	for _, id := range ids {
@@ -479,15 +473,10 @@ func (c *Client) fetchPersonNames(ctx context.Context, ids []string) (map[string
 		names[id] = person.Name
 	}
 
-	return names, nil
+	return names
 }
 
 func aggregateTimeSpent(logs []models.TimeLog, personNames map[string]string, params TimeSpentStatsParams) *models.TimeSpentStats {
-	type taskKey struct {
-		personID string
-		taskID   string
-	}
-
 	personTasks := make(map[string]map[string]*models.TimeSpentTaskEntry)
 
 	for i := range logs {
@@ -522,7 +511,7 @@ func aggregateTimeSpent(logs []models.TimeLog, personNames map[string]string, pa
 		entry.TimeSpent += log.TimeSpent
 	}
 
-	var persons []models.TimeSpentPersonEntry
+	persons := make([]models.TimeSpentPersonEntry, 0, len(personTasks))
 	grandTotal := 0
 
 	for pid, tasks := range personTasks {

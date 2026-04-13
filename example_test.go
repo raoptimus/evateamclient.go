@@ -18,7 +18,7 @@ func TestStats(t *testing.T) {
 	require.NoError(t, err)
 	defer c.Close()
 
-	report, err := c.SprintExecutorsKPI(context.Background(), SprintExecutorsKPIParams{
+	report, err := c.SprintExecutorsKPI(context.Background(), &SprintExecutorsKPIParams{
 		ProjectCode: "epud",
 		SprintCode:  "SPR-001838",
 	})

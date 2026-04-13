@@ -90,12 +90,12 @@ type SprintExecutorsKPIInput struct {
 
 // SprintExecutorsKPI retrieves KPI report for closed sprint tasks grouped by executor.
 // If sprint_code is empty, the report is aggregated across all project sprints.
-func (s *StatsTools) SprintExecutorsKPI(ctx context.Context, input SprintExecutorsKPIInput) (any, error) {
+func (s *StatsTools) SprintExecutorsKPI(ctx context.Context, input *SprintExecutorsKPIInput) (any, error) {
 	if input.ProjectCode == "" {
 		return nil, WrapError("stats_sprint_executors_kpi", ErrInvalidInput)
 	}
 
-	report, err := s.client.SprintExecutorsKPI(ctx, evateamclient.SprintExecutorsKPIParams{
+	report, err := s.client.SprintExecutorsKPI(ctx, &evateamclient.SprintExecutorsKPIParams{
 		SprintCode:      input.SprintCode,
 		ProjectCode:     input.ProjectCode,
 		SprintStartDate: input.SprintStartDate,

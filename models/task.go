@@ -87,7 +87,7 @@ type Task struct {
 	LogicTypeID string `json:"logic_type_id,omitempty"`
 }
 
-func (t TaskBrowse) IsClosedBetween(since, till time.Time) bool {
+func (t *TaskBrowse) IsClosedBetween(since, till time.Time) bool {
 	if !strings.EqualFold(t.CacheStatusType, StatusTypeClosed) || t.StatusClosedAt.IsZero() {
 		return false
 	}

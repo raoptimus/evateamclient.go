@@ -317,7 +317,7 @@ func TestClient_SprintExecutorsKPI_EmptySprintCode_UsesSprintPrefixWildcard(t *t
 		return strings.Contains(string(body), "SPR-%")
 	}
 
-	report, err := client.SprintExecutorsKPI(testCtx, SprintExecutorsKPIParams{
+	report, err := client.SprintExecutorsKPI(testCtx, &SprintExecutorsKPIParams{
 		ProjectCode: "epud",
 	})
 
