@@ -37,8 +37,8 @@ type List struct {
 	ProjectID         string      `json:"project_id,omitempty"`
 	CmfOwnerID        string      `json:"cmf_owner_id,omitempty"`
 	WorkflowID        string      `json:"workflow_id,omitempty"`
-	StartDate         time.Time   `json:"start_date,omitempty"`
-	EndDate           time.Time   `json:"end_date,omitempty"`
+	PlanStartDate     time.Time   `json:"plan_start_date,omitempty"`
+	PlanEndDate       time.Time   `json:"plan_end_date,omitempty"`
 	Goal              string      `json:"goal,omitempty"`
 	Text              string      `json:"text,omitempty"`
 	System            bool        `json:"system,omitempty"`

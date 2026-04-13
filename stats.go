@@ -3,7 +3,6 @@ package evateamclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -44,7 +43,7 @@ func (c *Client) ProjectTasksCount(ctx context.Context, projectID string) (int64
 // SprintTasksCount returns total tasks in sprint by list code.
 func (c *Client) SprintTasksCount(ctx context.Context, sprintCode string) (int64, *models.Meta, error) {
 	kwargs := map[string]any{
-		"filter": []any{TaskFieldLists, "contains", sprintCode},
+		"filter": []any{TaskFieldLists, "IN", []string{sprintCode}},
 	}
 	return c.TasksCount(ctx, kwargs)
 }
@@ -131,9 +130,9 @@ type SprintExecutorsKPIParams struct {
 	SprintCode string
 	// ProjectCode is required; if set, must match project.
 	ProjectCode string
-	// SprintStartDate optionally overrides sprint.start_date from EVA list.
+	// SprintStartDate optionally.
 	SprintStartDate time.Time
-	// SprintEndDate optionally overrides sprint.end_date from EVA list.
+	// SprintEndDate optionally.
 	SprintEndDate time.Time
 }
 
@@ -142,7 +141,7 @@ type sprintKPIExecutorAgg struct {
 	baselineTasks int
 	closedTasks   int
 	taskCodes     []string
-	sprints       map[string]models.List
+	sprintNames   map[string]string
 }
 
 // TimeSpentStats retrieves aggregated time spent report grouped by person and task.
@@ -172,42 +171,37 @@ func (c *Client) TimeSpentStats(ctx context.Context, params TimeSpentStatsParams
 //   - otherwise: task.cmf_created_at must be <= sprint.start_date
 func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsKPIParams) (*models.SprintExecutorsKPI, error) {
 	if params.ProjectCode == "" {
-		return nil, errors.New("project_id is required")
+		return nil, errors.New("project_code is required")
 	}
 
-	project, _, err := c.Project(ctx, params.ProjectCode, []string{TaskFieldProjectID})
+	project, _, err := c.Project(ctx, params.ProjectCode, []string{ProjectFieldID})
 	if err != nil {
 		return nil, err
 	}
 
 	// get sprints
-	qb := NewQueryBuilder().
+	qbLists := NewQueryBuilder().
 		Select(
 			ListFieldID,
-			ListFieldCode,
-			ListFieldName,
-			ListFieldProjectID,
-			ListFieldStartDate,
-			ListFieldEndDate,
 		).
 		Where(sq.Eq{ListFieldProjectID: project.ID}).
 		OrderBy(ListFieldID)
 
 	if params.SprintCode != "" {
-		qb.Where(sq.Eq{ListFieldCode: params.SprintCode}).Limit(1)
+		qbLists.Where(sq.Eq{ListFieldCode: params.SprintCode}).Limit(1)
 	} else {
-		qb.Where(sq.Like{ListFieldCode: models.ListSprintPrefix})
+		qbLists.Where(sq.Like{ListFieldCode: models.ListSprintPrefix + "%"})
 	}
 
 	if !params.SprintStartDate.IsZero() {
-		qb.Where(sq.GtOrEq{ListFieldStartDate: params.SprintStartDate})
+		qbLists.Where(sq.GtOrEq{ListFieldPlanStartDate: params.SprintStartDate})
 	}
 
 	if !params.SprintEndDate.IsZero() {
-		qb.Where(sq.LtOrEq{ListFieldEndDate: params.SprintStartDate})
+		qbLists.Where(sq.LtOrEq{ListFieldPlanEndDate: params.SprintEndDate})
 	}
 
-	sprints, _, err := c.ListsList(ctx, qb)
+	sprints, _, err := c.ListsList(ctx, qbLists)
 	if err != nil {
 		return nil, err
 	}
@@ -218,24 +212,35 @@ func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsK
 	unassignedTasks := 0
 
 	for i := range sprints {
-		sprint := sprints[i]
+		qbSprint := NewQueryBuilder().
+			Select(
+				ListFieldID,
+				ListFieldCode,
+				ListFieldName,
+				ListFieldProjectID,
+				ListFieldPlanStartDate,
+				ListFieldPlanEndDate,
+			).
+			Where(sq.Eq{ListFieldID: sprints[i].ID})
+		sprint, _, err := c.ListQuery(ctx, qbSprint)
+		if err != nil {
+			return nil, err
+		}
 
-		allSprintTasks, _, err := c.TasksList(
-			ctx,
-			NewQueryBuilder().
-				Select(
-					TaskFieldID,
-					TaskFieldCode,
-					TaskFieldName,
-					TaskFieldCmfCreatedAt,
-					TaskFieldStatusClosedAt,
-					TaskFieldCacheStatusType,
-					TaskFieldLists,
-				).
-				Where(sq.Eq{TaskFieldProjectID: sprint.ProjectID}).
-				Where(sq.Eq{TaskFieldLists: []string{sprint.ID}}).
-				OrderBy(TaskFieldID),
-		)
+		qbTasks := NewQueryBuilder().
+			Select(
+				TaskFieldID,
+				TaskFieldCode,
+				TaskFieldName,
+				TaskFieldCmfCreatedAt,
+				TaskFieldStatusClosedAt,
+				TaskFieldCacheStatusType,
+				TaskFieldLists,
+			).
+			Where(sq.Eq{TaskFieldProjectID: project.ID}).
+			Where(sq.Eq{TaskFieldLists: []string{sprint.ID}}).
+			OrderBy(TaskFieldID)
+		allSprintTasks, _, err := c.TasksList(ctx, qbTasks)
 		if err != nil {
 			return nil, err
 		}
@@ -249,29 +254,33 @@ func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsK
 				return nil, err
 			}
 			if assigneeID == "" {
-				topLoggerID, err := c.resolveTaskTopLoggerDuringSprint(ctx, task.ID, sprint.StartDate, sprint.EndDate)
+				topLoggerID, err := c.resolveTaskTopLoggerDuringSprint(ctx, task.ID, sprint.PlanStartDate, sprint.PlanEndDate)
 				if err != nil {
 					return nil, err
 				}
 				assigneeID = topLoggerID
 			}
 
-			if assigneeID != "" {
+			if assigneeID == "" {
 				unassignedTasks++
 				continue
 			}
 
 			agg, ok := executorAgg[assigneeID]
 			if !ok {
-				agg = &sprintKPIExecutorAgg{personID: assigneeID}
+				agg = &sprintKPIExecutorAgg{
+					personID:    assigneeID,
+					sprintNames: make(map[string]string),
+					taskCodes:   make([]string, 0),
+				}
 				executorAgg[assigneeID] = agg
 			}
 
 			agg.taskCodes = append(agg.taskCodes, task.Code)
-			agg.sprints[sprint.ID] = sprint
+			agg.sprintNames[sprint.ID] = sprint.Name
 			agg.baselineTasks++
 			baselineTasks++
-			if task.IsClosedBetween(sprint.StartDate, sprint.EndDate) {
+			if task.IsClosedBetween(sprint.PlanStartDate, sprint.PlanEndDate) {
 				agg.closedTasks++
 				closedTasks++
 			}
@@ -311,75 +320,32 @@ func (c *Client) SprintExecutorsKPI(ctx context.Context, params SprintExecutorsK
 		}
 
 		report.Executors = append(report.Executors, models.SprintExecutorKPIEntry{
-			PersonID:    personID,
-			PersonName:  personName,
-			ClosedTasks: agg.closedTasks,
-			TaskCodes:   agg.taskCodes,
+			PersonID:      personID,
+			PersonName:    personName,
+			BaselineTasks: agg.baselineTasks,
+			ClosedTasks:   agg.closedTasks,
+			TaskCodes:     agg.taskCodes,
 		})
 	}
 
 	return report, nil
 }
 
-func parseEVATime(raw string) (time.Time, bool, error) {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return time.Time{}, false, fmt.Errorf("empty time value")
-	}
-
-	layouts := []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02 15:04:05",
-		"2006-01-02 15:04",
-		"2006-01-02",
-	}
-
-	for _, layout := range layouts {
-		ts, err := time.Parse(layout, value)
-		if err == nil {
-			return ts, layout == "2006-01-02", nil
-		}
-	}
-
-	return time.Time{}, false, fmt.Errorf("unsupported time format: %q", value)
-}
-
 func (c *Client) resolveTaskFirstInProgressOwner(ctx context.Context, taskID string) (string, error) {
-	for offset := 0; ; offset += statusHistoryPageSize {
-		kwargs := map[string]any{
-			"filter": [][]any{
-				{StatusHistoryFieldParentID, "==", taskID},
-				{StatusHistoryFieldNewStatus, "==", models.StatusTypeInProgress},
-			},
-			"fields": []string{
-				StatusHistoryFieldID,
-				StatusHistoryFieldParentID,
-				StatusHistoryFieldNewStatus,
-				StatusHistoryFieldCmfOwnerID,
-				StatusHistoryFieldCmfCreatedAt,
-			},
-			"order_by": []string{StatusHistoryFieldCmfCreatedAt},
-			"slice":    []int{offset, offset + statusHistoryPageSize},
-		}
-
-		page, _, err := c.StatusHistories(ctx, kwargs)
-		if err != nil {
-			return "", err
-		}
-
-		for i := range page {
-			if strings.TrimSpace(page[i].CmfOwnerID) != "" {
-				return page[i].CmfOwnerID, nil
-			}
-		}
-
-		if len(page) < statusHistoryPageSize {
-			break
-		}
+	comment, _, err := c.CommentQuery(ctx,
+		NewQueryBuilder().
+			Select(CommentFieldAuthorID).
+			From(EntityComment).
+			Where(sq.Eq{CommentFieldText: "Работа начата"}).
+			Where(sq.Eq{CommentFieldParentID: taskID}).
+			OrderBy(CommentFieldCmfCreatedAt+" DESC").
+			Limit(1),
+	)
+	if err != nil {
+		return "", err
 	}
 
-	return "", nil
+	return comment.AuthorID, nil
 }
 
 func (c *Client) resolveTaskTopLoggerDuringSprint(ctx context.Context, taskID string, dateFrom, dateTo time.Time) (string, error) {
@@ -446,7 +412,6 @@ func (c *Client) resolveTaskTopLoggerDuringSprint(ctx context.Context, taskID st
 }
 
 const timeLogPageSize = 200
-const statusHistoryPageSize = 200
 
 func (c *Client) fetchAllProjectTimeLogs(ctx context.Context, params TimeSpentStatsParams) ([]models.TimeLog, error) {
 	var allLogs []models.TimeLog

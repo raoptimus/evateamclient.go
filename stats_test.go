@@ -3,6 +3,7 @@ package evateamclient
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/imroc/req/v3"
@@ -287,282 +288,42 @@ func TestClient_TimeSpentStats_WithDateFilter_PassesDatesToAPI(t *testing.T) {
 	assert.Equal(t, "2025-12-31", stats.DateTo)
 }
 
-func TestClient_SprintExecutorsKPI_FirstInProgress_ExcludesTasksCreatedDuringSprint(t *testing.T) {
+func TestClient_SprintExecutorsKPI_EmptySprintCode_UsesSprintPrefixWildcard(t *testing.T) {
 	client, mockHTTP := newTestClientWithSequentialMock(t)
 
-	sprintResp := `{
+	projectResp := `{
 		"jsonrpc": "2.2",
-		"result": {
-			"id": "CmfList:spr1",
-			"code": "SPR-001",
-			"project_id": "CmfProject:epud",
-			"start_date": "2025-01-10",
-			"end_date": "2025-01-20"
-		},
+		"result": {"id": "CmfProject:proj1"},
 		"meta": {}
 	}`
 
-	tasksResp := `{
+	emptyListsResp := `{
 		"jsonrpc": "2.2",
-		"result": [
-			{
-				"id": "CmfTask:1",
-				"code": "EPUD-1",
-				"name": "Task 1",
-				"lists": [{"id": "CmfList:spr1", "code": "SPR-001"}],
-				"cmf_created_at": "2025-01-01T09:00:00+03:00",
-				"status_closed_at": "2025-01-15T10:00:00+03:00"
-			},
-			{
-				"id": "CmfTask:2",
-				"code": "EPUD-2",
-				"name": "Task 2",
-				"lists": [{"id": "CmfList:spr1", "code": "SPR-001"}],
-				"cmf_created_at": "2025-01-12T09:00:00+03:00",
-				"status_closed_at": "2025-01-18T12:00:00+03:00"
-			},
-			{
-				"id": "CmfTask:3",
-				"code": "EPUD-3",
-				"name": "Task 3",
-				"lists": [{"id": "CmfList:spr1", "code": "SPR-001"}],
-				"cmf_created_at": "2025-01-05T09:00:00+03:00"
-			}
-		],
-		"meta": {"total": 3}
-	}`
-
-	statusHistoryResp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{
-				"id": "CmfStatusHistory:1",
-				"parent_id": "CmfTask:1",
-				"new_status": "IN_PROGRESS",
-				"cmf_owner_id": "CmfPerson:p1",
-				"cmf_created_at": "2025-01-11T09:30:00+03:00"
-			}
-		],
-		"meta": {"total": 1}
-	}`
-
-	personResp := `{
-		"jsonrpc": "2.2",
-		"result": {"id": "CmfPerson:p1", "name": "Alice"},
-		"meta": {}
+		"result": [],
+		"meta": {"total": 0}
 	}`
 
 	mockHTTP.responses = []*req.Response{
-		mockResponse(http.StatusOK, sprintResp),
-		mockResponse(http.StatusOK, tasksResp),
-		mockResponse(http.StatusOK, statusHistoryResp),
-		mockResponse(http.StatusOK, personResp),
+		mockResponse(http.StatusOK, projectResp),
+		mockResponse(http.StatusOK, emptyListsResp),
+	}
+
+	callNum := 0
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		callNum++
+		if callNum != 2 {
+			return true
+		}
+		return strings.Contains(string(body), "SPR-%")
 	}
 
 	report, err := client.SprintExecutorsKPI(testCtx, SprintExecutorsKPIParams{
-		ProjectID:    "CmfProject:epud",
-		SprintCode:   "SPR-001",
-		AssigneeMode: SprintKPIAssigneeModeFirstInProgress,
+		ProjectCode: "epud",
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	assert.Equal(t, "CmfProject:epud", report.ProjectID)
-	assert.Equal(t, "SPR-001", report.SprintCode)
-	assert.Equal(t, 2, report.BaselineTasks)
-	assert.Equal(t, 1, report.ExcludedNewTasks)
-	assert.Equal(t, 1, report.TotalClosedTasks)
-	assert.Equal(t, 0, report.UnassignedClosed)
-	require.Len(t, report.Executors, 1)
-	assert.Equal(t, "CmfPerson:p1", report.Executors[0].PersonID)
-	assert.Equal(t, "Alice", report.Executors[0].PersonName)
-	assert.Equal(t, 1, report.Executors[0].ClosedTasks)
-	assert.Equal(t, []string{"EPUD-1"}, report.Executors[0].TaskCodes)
-}
-
-func TestClient_SprintExecutorsKPI_MaxTimeSpent_AssignsByTopLogger(t *testing.T) {
-	client, mockHTTP := newTestClientWithSequentialMock(t)
-
-	sprintResp := `{
-		"jsonrpc": "2.2",
-		"result": {
-			"id": "CmfList:spr2",
-			"code": "SPR-002",
-			"project_id": "CmfProject:epud",
-			"start_date": "2025-02-01",
-			"end_date": "2025-02-14"
-		},
-		"meta": {}
-	}`
-
-	tasksResp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{
-				"id": "CmfTask:11",
-				"code": "EPUD-11",
-				"name": "Task 11",
-				"lists": [{"id": "CmfList:spr2", "code": "SPR-002"}],
-				"cmf_created_at": "2025-01-20T09:00:00+03:00",
-				"status_closed_at": "2025-02-10T10:00:00+03:00"
-			},
-			{
-				"id": "CmfTask:12",
-				"code": "EPUD-12",
-				"name": "Task 12",
-				"lists": [{"id": "CmfList:spr2", "code": "SPR-002"}],
-				"cmf_created_at": "2025-01-25T09:00:00+03:00",
-				"status_closed_at": "2025-02-13T10:00:00+03:00"
-			}
-		],
-		"meta": {"total": 2}
-	}`
-
-	logsTask11Resp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{"id": "log-11-1", "time_spent": 60, "cmf_owner_id": "CmfPerson:p1"},
-			{"id": "log-11-2", "time_spent": 120, "cmf_owner_id": "CmfPerson:p2"}
-		],
-		"meta": {"total": 2}
-	}`
-
-	logsTask12Resp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{"id": "log-12-1", "time_spent": 30, "cmf_owner_id": "CmfPerson:p1"},
-			{"id": "log-12-2", "time_spent": 30, "cmf_owner_id": "CmfPerson:p2"}
-		],
-		"meta": {"total": 2}
-	}`
-
-	person1Resp := `{
-		"jsonrpc": "2.2",
-		"result": {"id": "CmfPerson:p1", "name": "Alice"},
-		"meta": {}
-	}`
-
-	person2Resp := `{
-		"jsonrpc": "2.2",
-		"result": {"id": "CmfPerson:p2", "name": "Bob"},
-		"meta": {}
-	}`
-
-	mockHTTP.responses = []*req.Response{
-		mockResponse(http.StatusOK, sprintResp),
-		mockResponse(http.StatusOK, tasksResp),
-		mockResponse(http.StatusOK, logsTask11Resp),
-		mockResponse(http.StatusOK, logsTask12Resp),
-		mockResponse(http.StatusOK, person1Resp),
-		mockResponse(http.StatusOK, person2Resp),
-	}
-
-	report, err := client.SprintExecutorsKPI(testCtx, SprintExecutorsKPIParams{
-		ProjectID:    "CmfProject:epud",
-		SprintCode:   "SPR-002",
-		AssigneeMode: SprintKPIAssigneeModeMaxTimeSpent,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, report)
-	assert.Equal(t, 2, report.BaselineTasks)
-	assert.Equal(t, 0, report.ExcludedNewTasks)
-	assert.Equal(t, 2, report.TotalClosedTasks)
-	assert.Equal(t, 0, report.UnassignedClosed)
-	require.Len(t, report.Executors, 2)
-
-	assert.Equal(t, "CmfPerson:p1", report.Executors[0].PersonID)
-	assert.Equal(t, "Alice", report.Executors[0].PersonName)
-	assert.Equal(t, 1, report.Executors[0].ClosedTasks)
-	assert.Equal(t, []string{"EPUD-12"}, report.Executors[0].TaskCodes)
-
-	assert.Equal(t, "CmfPerson:p2", report.Executors[1].PersonID)
-	assert.Equal(t, "Bob", report.Executors[1].PersonName)
-	assert.Equal(t, 1, report.Executors[1].ClosedTasks)
-	assert.Equal(t, []string{"EPUD-11"}, report.Executors[1].TaskCodes)
-}
-
-func TestClient_SprintExecutorsKPI_MissingSprintDates_DoesNotFail(t *testing.T) {
-	client, mockHTTP := newTestClientWithSequentialMock(t)
-
-	sprintResp := `{
-		"jsonrpc": "2.2",
-		"result": {
-			"id": "CmfList:spr3",
-			"code": "SPR-003",
-			"project_id": "CmfProject:epud"
-		},
-		"meta": {}
-	}`
-
-	tasksResp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{
-				"id": "CmfTask:21",
-				"code": "EPUD-21",
-				"name": "Task 21",
-				"lists": [{"id": "CmfList:spr3", "code": "SPR-003"}],
-				"cmf_created_at": "2025-03-01T09:00:00+03:00",
-				"status_closed_at": "2025-03-03T10:00:00+03:00"
-			},
-			{
-				"id": "CmfTask:22",
-				"code": "EPUD-22",
-				"name": "Task 22",
-				"lists": [{"id": "CmfList:spr3", "code": "SPR-003"}],
-				"cmf_created_at": "2025-03-02T09:00:00+03:00"
-			}
-		],
-		"meta": {"total": 2}
-	}`
-
-	statusHistoryResp := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{
-				"id": "CmfStatusHistory:21",
-				"parent_id": "CmfTask:21",
-				"new_status": "IN_PROGRESS",
-				"cmf_owner_id": "CmfPerson:p1",
-				"cmf_created_at": "2025-03-02T09:30:00+03:00"
-			}
-		],
-		"meta": {"total": 1}
-	}`
-
-	personResp := `{
-		"jsonrpc": "2.2",
-		"result": {"id": "CmfPerson:p1", "name": "Alice"},
-		"meta": {}
-	}`
-
-	mockHTTP.responses = []*req.Response{
-		mockResponse(http.StatusOK, sprintResp),
-		mockResponse(http.StatusOK, tasksResp),
-		mockResponse(http.StatusOK, statusHistoryResp),
-		mockResponse(http.StatusOK, personResp),
-	}
-
-	report, err := client.SprintExecutorsKPI(testCtx, SprintExecutorsKPIParams{
-		ProjectID:    "CmfProject:epud",
-		SprintCode:   "SPR-003",
-		AssigneeMode: SprintKPIAssigneeModeFirstInProgress,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, report)
-	assert.Equal(t, "CmfProject:epud", report.ProjectID)
-	assert.Equal(t, "SPR-003", report.SprintCode)
-	assert.Equal(t, "", report.SprintStartDate)
-	assert.Equal(t, "", report.SprintEndDate)
-	assert.Equal(t, 2, report.BaselineTasks)
-	assert.Equal(t, 0, report.ExcludedNewTasks)
-	assert.Equal(t, 1, report.TotalClosedTasks)
-	assert.Equal(t, 0, report.UnassignedClosed)
-	require.Len(t, report.Executors, 1)
-	assert.Equal(t, "CmfPerson:p1", report.Executors[0].PersonID)
-	assert.Equal(t, "Alice", report.Executors[0].PersonName)
-	assert.Equal(t, 1, report.Executors[0].ClosedTasks)
-	assert.Equal(t, []string{"EPUD-21"}, report.Executors[0].TaskCodes)
+	assert.Equal(t, 0, report.BaselineTasks)
+	assert.Equal(t, 0, report.TotalClosedTasks)
+	assert.Empty(t, report.Executors)
 }

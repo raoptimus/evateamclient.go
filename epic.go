@@ -113,7 +113,7 @@ func (c *Client) ProjectEpics(
 	ctx context.Context,
 	projectID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(fields) == 0 {
 		fields = DefaultEpicListFields
 	}
@@ -149,7 +149,7 @@ func (c *Client) EpicTasks(
 	ctx context.Context,
 	epicID string,
 	fields []string,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityTask).
@@ -170,7 +170,7 @@ func (c *Client) EpicTasks(
 func (c *Client) Epics(
 	ctx context.Context,
 	kwargs map[string]any,
-) ([]models.Task, *models.Meta, error) {
+) ([]models.TaskBrowse, *models.Meta, error) {
 	if len(kwargs) == 0 {
 		kwargs = make(map[string]any)
 	}

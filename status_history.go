@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -98,7 +99,7 @@ func (c *Client) StatusHistoryQuery(ctx context.Context, qb *QueryBuilder) (*mod
 
 	var resp models.StatusHistoryResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get status history list")
 	}
 
 	return &resp.Result, &resp.Meta, nil
@@ -118,7 +119,7 @@ func (c *Client) StatusHistoryList(
 	ctx context.Context,
 	qb *QueryBuilder,
 ) ([]models.StatusHistory, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+	kwargs, err := qb.From(EntityStatusHistory).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +143,7 @@ func (c *Client) StatusHistoryList(
 
 	var resp models.StatusHistoryListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get status history list")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -177,28 +178,10 @@ func (c *Client) StatusHistoryCount(
 	}
 
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return 0, err
+		return 0, errors.WithMessage(err, "failed to get status history count")
 	}
 
 	return resp.Result, nil
-}
-
-// TaskStatusHistory retrieves ALL status changes for specific task
-// Example:
-//
-//	histories, meta, err := client.TaskStatusHistory(ctx, "CmfTask:uuid", nil)
-func (c *Client) TaskStatusHistory(
-	ctx context.Context,
-	taskID string,
-	fields []string,
-) ([]models.StatusHistory, *models.Meta, error) {
-	qb := NewQueryBuilder().
-		Select(fields...).
-		From(EntityStatusHistory).
-		Where(sq.Eq{StatusHistoryFieldParentID: taskID}).
-		OrderBy("-" + StatusHistoryFieldCmfCreatedAt)
-
-	return c.StatusHistoryList(ctx, qb)
 }
 
 // ProjectStatusHistory retrieves ALL status changes for project entities
@@ -244,7 +227,7 @@ func (c *Client) StatusHistories(
 
 	var resp models.StatusHistoryListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get status histories")
 	}
 
 	return resp.Result, &resp.Meta, nil

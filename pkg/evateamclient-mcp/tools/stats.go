@@ -83,14 +83,15 @@ func (s *StatsTools) TimeSpentStats(ctx context.Context, input TimeSpentStatsInp
 // SprintExecutorsKPIInput represents input for eva_stats_sprint_executors_kpi tool.
 type SprintExecutorsKPIInput struct {
 	ProjectCode     string    `json:"project_code,omitempty"`
-	SprintCode      string    `json:"sprint_code"`
+	SprintCode      string    `json:"sprint_code,omitempty"`
 	SprintStartDate time.Time `json:"sprint_start_date,omitempty"`
 	SprintEndDate   time.Time `json:"sprint_end_date,omitempty"`
 }
 
 // SprintExecutorsKPI retrieves KPI report for closed sprint tasks grouped by executor.
+// If sprint_code is empty, the report is aggregated across all project sprints.
 func (s *StatsTools) SprintExecutorsKPI(ctx context.Context, input SprintExecutorsKPIInput) (any, error) {
-	if input.SprintCode == "" {
+	if input.ProjectCode == "" {
 		return nil, WrapError("stats_sprint_executors_kpi", ErrInvalidInput)
 	}
 

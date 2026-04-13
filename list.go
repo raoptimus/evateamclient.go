@@ -26,8 +26,8 @@ const (
 	ListFieldWorkflowID = "workflow_id"
 
 	// Date fields
-	ListFieldStartDate = "start_date"
-	ListFieldEndDate   = "end_date"
+	ListFieldPlanStartDate = "plan_start_date"
+	ListFieldPlanEndDate   = "plan_end_date"
 
 	// Content
 	ListFieldGoal = "goal"
@@ -60,8 +60,8 @@ var (
 		ListFieldProjectID,
 		ListFieldCmfOwnerID,
 		ListFieldWorkflowID,
-		ListFieldStartDate,
-		ListFieldEndDate,
+		ListFieldPlanStartDate,
+		ListFieldPlanEndDate,
 		ListFieldGoal,
 	}
 
@@ -128,7 +128,7 @@ func (c *Client) ListQuery(ctx context.Context, qb *QueryBuilder) (*models.List,
 
 	var resp models.ListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get list")
 	}
 
 	return &resp.Result, &resp.Meta, nil
@@ -148,7 +148,7 @@ func (c *Client) ListsList(
 	ctx context.Context,
 	qb *QueryBuilder,
 ) ([]models.List, *models.Meta, error) {
-	kwargs, err := qb.ToKwargs()
+	kwargs, err := qb.From(EntityList).ToKwargs()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,7 +172,7 @@ func (c *Client) ListsList(
 
 	var resp models.ListListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, errors.WithMessage(err, "get lists")
+		return nil, nil, errors.WithMessage(err, "failed to get lists")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -207,7 +207,7 @@ func (c *Client) ListCount(
 	}
 
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return 0, err
+		return 0, errors.WithMessage(err, "failed to get list count")
 	}
 
 	return resp.Result, nil
@@ -272,7 +272,7 @@ func (c *Client) Lists(ctx context.Context, kwargs map[string]any) ([]models.Lis
 
 	var resp models.ListListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get lists")
 	}
 
 	return resp.Result, &resp.Meta, nil

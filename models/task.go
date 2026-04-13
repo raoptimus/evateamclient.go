@@ -5,22 +5,32 @@ import (
 	"time"
 )
 
+type TaskBrowse struct {
+	ID                   string    `json:"id"`
+	ClassName            string    `json:"class_name"`
+	AgileStoryPoints     string    `json:"agile_story_points"` // Story Points
+	CacheStatusType      string    `json:"cache_status_type"`
+	Code                 string    `json:"code"`
+	Deadline             time.Time `json:"deadline,omitempty"`
+	EpicID               string    `json:"epic_id,omitempty"`
+	Name                 string    `json:"name"`
+	Priority             int       `json:"priority,omitempty"`
+	ProjectID            string    `json:"project_id,omitempty"`
+	ResponsibleID        string    `json:"responsible_id,omitempty"`
+	CacheChildTasksCount int       `json:"cache_child_tasks_count"`
+	ParentID             string    `json:"parent_id,omitempty"` // ParentID - project id
+	CmfOwnerID           string    `json:"cmf_owner_id"`
+	WorkflowID           string    `json:"workflow_id"`
+
+	StatusClosedAt time.Time `json:"status_closed_at,omitempty"`
+}
+
 // Task represents COMPLETE task object from Task.get/list.
 type Task struct {
-	// Core identification
-	ID               string  `json:"id"`
-	ClassName        string  `json:"class_name"`
-	Code             string  `json:"code"`
-	Name             string  `json:"name"`
-	Text             string  `json:"text,omitempty"`
-	AgileStoryPoints string  `json:"agile_story_points"` // Story Points
-	CacheStatusType  string  `json:"cache_status_type"`
-	Priority         int     `json:"priority,omitempty"`
-	ProjectID        string  `json:"project_id,omitempty"`
-	ParentID         string  `json:"parent_id,omitempty"`
-	Deadline         *string `json:"deadline,omitempty"`
-	Mark             string  `json:"mark,omitempty"`
-	AlarmDate        *string `json:"alarm_date,omitempty"`
+	TaskBrowse
+	Text      string  `json:"text,omitempty"`
+	Mark      string  `json:"mark,omitempty"`
+	AlarmDate *string `json:"alarm_date,omitempty"`
 
 	// Nested relations (embedded objects)
 	Responsible *Person    `json:"responsible,omitempty"`
@@ -46,7 +56,7 @@ type Task struct {
 	CmfVersion    string    `json:"cmf_version,omitempty"`
 
 	// Import Data
-	ImportRawJSON any `json:"import_raw_json,omitempty"`
+	// ImportRawJSON any `json:"import_raw_json,omitempty"`
 
 	// Additional Fields
 	ExtID     string `json:"ext_id,omitempty"`
@@ -58,30 +68,24 @@ type Task struct {
 	// Dates
 	PlanStartDate  time.Time `json:"plan_start_date,omitempty"`
 	PlanEndDate    time.Time `json:"plan_end_date,omitempty"`
-	PeriodInterval *string   `json:"period_interval,omitempty"`
-	PeriodNextDate *string   `json:"period_next_date,omitempty"`
+	PeriodInterval string    `json:"period_interval,omitempty"`
+	PeriodNextDate string    `json:"period_next_date,omitempty"`
 
 	// Status Tracking
 	StatusModifiedAt      time.Time `json:"status_modified_at,omitempty"`
 	StatusInProgressStart time.Time `json:"status_in_progress_start,omitempty"`
 	StatusInProgressEnd   time.Time `json:"status_in_progress_end,omitempty"`
 	StatusReviewAt        time.Time `json:"status_review_at,omitempty"`
-	StatusClosedAt        time.Time `json:"status_closed_at,omitempty"`
 
 	// Additional Flags
 	ArchiveDate time.Time `json:"archiveddate,omitempty"`
 	ResultText  string    `json:"result_text,omitempty"`
 
 	// System fields
-	CacheChildTasksCount int    `json:"cache_child_tasks_count"`
-	WorkflowID           string `json:"workflow_id"`
-	CmfOwnerID           string `json:"cmf_owner_id"`
-	EpicID               string `json:"epic_id,omitempty"`
-	LogicTypeID          string `json:"logic_type_id,omitempty"`
-	ResponsibleID        string `json:"responsible_id,omitempty"`
+	LogicTypeID string `json:"logic_type_id,omitempty"`
 }
 
-func (t Task) IsClosedBetween(since, till time.Time) bool {
+func (t TaskBrowse) IsClosedBetween(since, till time.Time) bool {
 	if !strings.EqualFold(t.CacheStatusType, StatusTypeClosed) || t.StatusClosedAt.IsZero() {
 		return false
 	}
@@ -98,7 +102,7 @@ type TaskResponse struct {
 
 // TaskListResponse for Task.list.
 type TaskListResponse struct {
-	JSONRPC string `json:"jsonrpc"`
-	Result  []Task `json:"result"`
-	Meta    Meta   `json:"meta,omitempty"`
+	JSONRPC string       `json:"jsonrpc"`
+	Result  []TaskBrowse `json:"result"`
+	Meta    Meta         `json:"meta,omitempty"`
 }

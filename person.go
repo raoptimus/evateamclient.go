@@ -4,6 +4,7 @@ import (
 	"context"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -144,7 +145,7 @@ func (c *Client) PersonQuery(ctx context.Context, qb *QueryBuilder) (*models.Per
 
 	var resp models.PersonResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get person")
 	}
 
 	return &resp.Result, &resp.Meta, nil
@@ -189,7 +190,7 @@ func (c *Client) PersonsList(
 
 	var resp models.PersonListResponse
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithMessage(err, "failed to get persons")
 	}
 
 	return resp.Result, &resp.Meta, nil
@@ -224,7 +225,7 @@ func (c *Client) PersonCount(
 	}
 
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
-		return 0, err
+		return 0, errors.WithMessage(err, "failed to get person count")
 	}
 
 	return resp.Result, nil

@@ -49,10 +49,11 @@ type TimeSpentStats struct {
 
 // SprintExecutorKPIEntry represents KPI metrics for a single executor in sprint report.
 type SprintExecutorKPIEntry struct {
-	PersonID    string   `json:"person_id"`
-	PersonName  string   `json:"person_name"`
-	ClosedTasks int      `json:"closed_tasks"`
-	TaskCodes   []string `json:"task_codes,omitempty"`
+	PersonID      string   `json:"person_id"`
+	PersonName    string   `json:"person_name"`
+	BaselineTasks int      `json:"baseline_tasks"`
+	ClosedTasks   int      `json:"closed_tasks"`
+	TaskCodes     []string `json:"task_codes,omitempty"`
 }
 
 // SprintExecutorsKPI represents closed tasks KPI grouped by executor for a sprint.

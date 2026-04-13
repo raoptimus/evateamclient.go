@@ -29,14 +29,18 @@ type QueryBuilder struct {
 // NewQueryBuilder creates a new EVA-compatible Squirrel builder
 func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{
-		selectBuilder: sq.Select("*"),
+		selectBuilder: sq.Select(),
+		noMeta:        true,
 	}
 }
 
 // Select sets columns to retrieve (maps to EVA "fields")
+// If no columns provided, default fields will be applied by the caller.
 // Example: qb.Select("id", "name", "code", "executors")
 func (qb *QueryBuilder) Select(columns ...string) *QueryBuilder {
-	qb.selectBuilder = qb.selectBuilder.Columns(columns...)
+	if len(columns) > 0 {
+		qb.selectBuilder = qb.selectBuilder.Columns(columns...)
+	}
 	return qb
 }
 
@@ -111,7 +115,7 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 	kwargs := make(map[string]any)
 
 	// Extract parts from Squirrel builder
-	sqlStr, args, err := qb.selectBuilder.ToSql()
+	sqlStr, args, err := qb.safeBuilder().ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("squirrel.ToSql: %w", err)
 	}
@@ -132,7 +136,7 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 	}
 
 	// Convert SELECT columns to EVA fields
-	if len(parts.fields) > 0 && parts.fields[0] != "*" {
+	if len(parts.fields) > 0 {
 		kwargs["fields"] = parts.fields
 	}
 
@@ -162,7 +166,7 @@ func (qb *QueryBuilder) ToKwargs() (map[string]any, error) {
 // Example: "CmfProject" -> "CmfProject.list" or "CmfProject.get" if single is true
 func (qb *QueryBuilder) ToMethod(single bool) (string, error) {
 	// Extract table name from Squirrel builder
-	sqlStr, _, err := qb.selectBuilder.ToSql()
+	sqlStr, _, err := qb.safeBuilder().ToSql()
 	if err != nil {
 		return "", err
 	}
@@ -182,9 +186,19 @@ func (qb *QueryBuilder) ToMethod(single bool) (string, error) {
 
 // Validate checks if query is valid before execution
 // Returns error if query has invalid parameters
+// safeBuilder returns selectBuilder with at least one column.
+// Squirrel requires at least one result column for ToSql();
+// if no columns were specified, "*" is used as a placeholder.
+func (qb *QueryBuilder) safeBuilder() sq.SelectBuilder {
+	if _, _, err := qb.selectBuilder.ToSql(); err != nil {
+		return qb.selectBuilder.Columns("*")
+	}
+	return qb.selectBuilder
+}
+
 func (qb *QueryBuilder) Validate() error {
 	// Check if From() was called
-	sqlStr, _, err := qb.selectBuilder.ToSql()
+	sqlStr, _, err := qb.safeBuilder().ToSql()
 	if err != nil {
 		return fmt.Errorf("invalid query: %w", err)
 	}
@@ -300,94 +314,83 @@ func extractTableName(sqlStr string) string {
 // convertSquirrelFilters converts SQL WHERE to EVA BQL filters
 // Handles Squirrel's Eq, Gt, Lt, Like, etc.
 func convertSquirrelFilters(whereClause string, args []any) []any {
-	filters := []any{}
+	var filters []any
 
-	// Simple parser for common patterns
+	whereClause = strings.TrimSpace(whereClause)
+	whereClause = strings.TrimPrefix(whereClause, "WHERE ")
+
+	// Simple parser for common patterns, preserving argument order.
+	conditions := splitTopLevelAND(whereClause)
 	argIdx := 0
 
-	// Pattern: field = ?
-	if strings.Contains(whereClause, " = ?") {
-		parts := strings.Split(whereClause, " = ?")
-		for i, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
-			if argIdx < len(args) {
-				filters = append(filters, []any{fieldName, "==", args[argIdx]})
-				argIdx++
-			}
-
-			// Check for AND
-			if i < len(parts)-2 && strings.Contains(parts[i+1], " AND ") {
-				// Multiple filters, continue
-				continue
-			}
+	for _, cond := range conditions {
+		cond = trimWrappingParens(cond)
+		if cond == "" {
+			continue
 		}
-	}
 
-	// Pattern: field > ?
-	if strings.Contains(whereClause, " > ?") {
-		parts := strings.Split(whereClause, " > ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
-			if argIdx < len(args) {
-				filters = append(filters, []any{fieldName, ">", args[argIdx]})
-				argIdx++
+		upperCond := strings.ToUpper(cond)
+
+		// Pattern: field IN (?, ?, ...)
+		if inIdx := strings.Index(upperCond, " IN ("); inIdx >= 0 {
+			fieldName := extractLastWord(cond[:inIdx])
+			openIdx := strings.Index(cond[inIdx:], "(")
+			closeIdx := strings.Index(cond[inIdx:], ")")
+			if openIdx >= 0 && closeIdx > openIdx {
+				inPart := cond[inIdx+openIdx : inIdx+closeIdx+1]
+				placeholders := strings.Count(inPart, "?")
+				values := make([]any, 0, placeholders)
+				for i := 0; i < placeholders && argIdx < len(args); i++ {
+					values = append(values, args[argIdx])
+					argIdx++
+				}
+				if len(values) > 0 {
+					filters = append(filters, []any{fieldName, "IN", values})
+				}
 			}
-		}
-	}
 
-	// Pattern: field >= ?
-	if strings.Contains(whereClause, " >= ?") {
-		parts := strings.Split(whereClause, " >= ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
+			continue
+		}
+
+		switch {
+		case strings.Contains(cond, " >= ?"):
+			fieldName := extractLastWord(strings.Split(cond, " >= ?")[0])
 			if argIdx < len(args) {
 				filters = append(filters, []any{fieldName, ">=", args[argIdx]})
 				argIdx++
 			}
-		}
-	}
-
-	// Pattern: field < ?
-	if strings.Contains(whereClause, " < ?") {
-		parts := strings.Split(whereClause, " < ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
-			if argIdx < len(args) {
-				filters = append(filters, []any{fieldName, "<", args[argIdx]})
-				argIdx++
-			}
-		}
-	}
-
-	// Pattern: field <= ?
-	if strings.Contains(whereClause, " <= ?") {
-		parts := strings.Split(whereClause, " <= ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
+		case strings.Contains(cond, " <= ?"):
+			fieldName := extractLastWord(strings.Split(cond, " <= ?")[0])
 			if argIdx < len(args) {
 				filters = append(filters, []any{fieldName, "<=", args[argIdx]})
 				argIdx++
 			}
-		}
-	}
-
-	// Pattern: field != ?
-	if strings.Contains(whereClause, " != ?") {
-		parts := strings.Split(whereClause, " != ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
+		case strings.Contains(cond, " != ?"):
+			fieldName := extractLastWord(strings.Split(cond, " != ?")[0])
 			if argIdx < len(args) {
 				filters = append(filters, []any{fieldName, "!=", args[argIdx]})
 				argIdx++
 			}
-		}
-	}
-
-	// Pattern: field LIKE ?
-	if strings.Contains(whereClause, " LIKE ?") {
-		parts := strings.Split(whereClause, " LIKE ?")
-		for _, part := range parts[:len(parts)-1] {
-			fieldName := extractLastWord(part)
+		case strings.Contains(cond, " = ?"):
+			fieldName := extractLastWord(strings.Split(cond, " = ?")[0])
+			if argIdx < len(args) {
+				filters = append(filters, []any{fieldName, "==", args[argIdx]})
+				argIdx++
+			}
+		case strings.Contains(cond, " > ?"):
+			fieldName := extractLastWord(strings.Split(cond, " > ?")[0])
+			if argIdx < len(args) {
+				filters = append(filters, []any{fieldName, ">", args[argIdx]})
+				argIdx++
+			}
+		case strings.Contains(cond, " < ?"):
+			fieldName := extractLastWord(strings.Split(cond, " < ?")[0])
+			if argIdx < len(args) {
+				filters = append(filters, []any{fieldName, "<", args[argIdx]})
+				argIdx++
+			}
+		case strings.Contains(cond, " LIKE ?"):
+			fieldName := extractLastWord(strings.Split(cond, " LIKE ?")[0])
 			if argIdx < len(args) {
 				filters = append(filters, []any{fieldName, "LIKE", args[argIdx]})
 				argIdx++
@@ -396,6 +399,45 @@ func convertSquirrelFilters(whereClause string, args []any) []any {
 	}
 
 	return filters
+}
+
+func splitTopLevelAND(whereClause string) []string {
+	if whereClause == "" {
+		return nil
+	}
+
+	parts := []string{}
+	depth := 0
+	start := 0
+
+	for i := 0; i < len(whereClause); i++ {
+		switch whereClause[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		}
+
+		if depth == 0 && strings.HasPrefix(whereClause[i:], " AND ") {
+			parts = append(parts, strings.TrimSpace(whereClause[start:i]))
+			start = i + len(" AND ")
+			i += len(" AND ") - 1
+		}
+	}
+
+	parts = append(parts, strings.TrimSpace(whereClause[start:]))
+	return parts
+}
+
+func trimWrappingParens(s string) string {
+	s = strings.TrimSpace(s)
+	for strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") {
+		s = strings.TrimSpace(s[1 : len(s)-1])
+	}
+
+	return s
 }
 
 // extractLastWord extracts the last word from a string (field name)

@@ -153,26 +153,6 @@ func TestClient_StatusHistoryCount_Success_ReturnsCount(t *testing.T) {
 	assert.Equal(t, 42, count)
 }
 
-func TestClient_TaskStatusHistory_Success_ReturnsHistories(t *testing.T) {
-	client, mockHTTP := newTestClient(t)
-
-	respBody := `{
-		"jsonrpc": "2.2",
-		"result": [
-			{"id": "CmfStatusHistory:1", "parent_id": "CmfTask:123", "old_status": "OPEN", "new_status": "IN_PROGRESS"}
-		],
-		"meta": {"total": 1}
-	}`
-
-	mockHTTP.response = mockResponse(http.StatusOK, respBody)
-
-	histories, meta, err := client.TaskStatusHistory(testCtx, "CmfTask:123", nil)
-
-	require.NoError(t, err)
-	assert.Len(t, histories, 1)
-	assert.NotNil(t, meta)
-}
-
 func TestClient_ProjectStatusHistory_Success_ReturnsHistories(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
