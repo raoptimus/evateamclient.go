@@ -1,8 +1,9 @@
 # EVA Team Go Client Library
 
-[![Go Version](https://img.shields.io/badge/go-1.18+-blue.svg)](https://golang.org/dl/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-production--ready-brightgreen.svg)](#production-readiness)
+[![Test](https://github.com/raoptimus/evateamclient.go/workflows/Test/badge.svg)](https://github.com/raoptimus/evateamclient.go/actions)
+[![Coverage](https://github.com/raoptimus/evateamclient.go/wiki/coverage.svg)](https://raw.githack.com/wiki/raoptimus/evateamclient.go/coverage.html)
+[![GitHub Release](https://img.shields.io/github/release/raoptimus/evateamclient.go.svg)](https://github.com/raoptimus/evateamclient.go/releases)
+
 
 Production-grade Go client for [EVA Team](https://eva.team) JSON-RPC API. Fully typed, comprehensive coverage, and battle-tested.
 

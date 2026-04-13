@@ -1,4 +1,5 @@
 .idea
+.report
 .claude
 *.md
 !README.md
