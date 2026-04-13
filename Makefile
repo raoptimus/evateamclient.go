@@ -20,5 +20,8 @@ test: ## Run unit tests
 lint: ## Run linter
 	@golangci-lint run --timeout 5m
 
+install-mcp: ## Install evateamclient-mcp binary
+	@go install ${LDFLAGS} ./pkg/evateamclient-mcp
+
 genmock: ## Generate all mocks
 	@mockery
