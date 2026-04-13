@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -9,20 +17,14 @@ import (
 
 // Comment field constants for type-safe queries
 const (
-	// Core fields
-	CommentFieldID        = "id"
-	CommentFieldClassName = "class_name"
-	CommentFieldText      = "text"
-	CommentFieldLogLevel  = "log_level"
-
-	// Relations
-	CommentFieldTaskID   = "task_id" // parent task
-	CommentFieldAuthorID = "cmf_author_id"
-
-	// System
-	CommentFieldCmfCreatedAt  = "cmf_created_at"
-	CommentFieldCmfModifiedAt = "cmf_modified_at"
-	CommentFieldCmfOwnerID    = "cmf_owner_id"
+	CommentFieldID           = "id"
+	CommentFieldClassName    = "class_name"
+	CommentFieldText         = "text"
+	CommentFieldLogLevel     = "log_level"
+	CommentFieldParentID     = "parent_id" // parent task
+	CommentFieldAuthorID     = "cmf_author_id"
+	CommentFieldCmfCreatedAt = "cmf_created_at"
+	CommentFieldCmfOwnerID   = "cmf_owner_id"
 )
 
 var (
@@ -32,7 +34,7 @@ var (
 		CommentFieldClassName,
 		CommentFieldText,
 		CommentFieldAuthorID,
-		CommentFieldTaskID,
+		CommentFieldParentID,
 		CommentFieldCmfCreatedAt,
 		CommentFieldLogLevel,
 	}
@@ -85,7 +87,7 @@ func (c *Client) CommentQuery(ctx context.Context, qb *QueryBuilder) (*models.Co
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.get",
+		Method:  "CmfComment.get",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
@@ -189,7 +191,7 @@ func (c *Client) TaskComments(
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityComment).
-		Where(sq.Eq{CommentFieldTaskID: "Task:" + taskCode}).
+		Where(sq.Eq{CommentFieldParentID: "Task:" + taskCode}).
 		OrderBy("-" + CommentFieldCmfCreatedAt)
 
 	return c.CommentsList(ctx, qb)
@@ -207,7 +209,7 @@ func (c *Client) TaskCommentsByID(
 	qb := NewQueryBuilder().
 		Select(fields...).
 		From(EntityComment).
-		Where(sq.Eq{CommentFieldTaskID: taskID}).
+		Where(sq.Eq{CommentFieldParentID: taskID}).
 		OrderBy("-" + CommentFieldCmfCreatedAt)
 
 	return c.CommentsList(ctx, qb)
@@ -249,7 +251,7 @@ func (c *Client) Comments(
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.list",
+		Method:  "CmfComment.list",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}

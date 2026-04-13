@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient_test
 
 import (
@@ -261,6 +269,28 @@ func TestQueryBuilder_Between_CreatesRangeFilter(t *testing.T) {
 	filter, hasFilter := kwargs["filter"]
 	assert.True(t, hasFilter)
 	assert.NotNil(t, filter)
+}
+
+func TestQueryBuilder_Where_INPredicate_ConvertsToINFilter(t *testing.T) {
+	qb := evateamclient.NewQueryBuilder().
+		From(evateamclient.EntityTask).
+		Where(sq.Eq{"lists": []string{"SPR-001", "SPR-002"}})
+
+	kwargs, err := qb.ToKwargs()
+	require.NoError(t, err)
+
+	filterRaw, hasFilter := kwargs["filter"]
+	require.True(t, hasFilter)
+
+	filter, ok := filterRaw.([]any)
+	require.True(t, ok)
+	require.Len(t, filter, 3)
+	assert.Equal(t, "lists", filter[0])
+	assert.Equal(t, "IN", filter[1])
+
+	values, ok := filter[2].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"SPR-001", "SPR-002"}, values)
 }
 
 func TestQueryBuilder_ToKwargs_PaginationScenarios_ReturnsCorrectSlice(t *testing.T) {

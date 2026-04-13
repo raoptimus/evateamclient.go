@@ -1,3 +1,11 @@
+/**
+ * This file is part of the raoptimus/evateamclient.go library
+ *
+ * @copyright Copyright (c) Evgeniy Urvantsev
+ * @license https://github.com/raoptimus/evateamclient.go/blob/master/LICENSE.md
+ * @link https://github.com/raoptimus/evateamclient.go
+ */
+
 package evateamclient
 
 import (
@@ -117,6 +125,38 @@ func TestConvertSquirrelFilters_ComparisonOperators_ReturnsFilters(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestConvertSquirrelFilters_INOperator_ReturnsFilter(t *testing.T) {
+	whereClause := "WHERE lists IN (?, ?)"
+	args := []any{"SPR-001", "SPR-002"}
+
+	filters := convertSquirrelFilters(whereClause, args)
+
+	require.Len(t, filters, 1)
+	filter := filters[0].([]any)
+	assert.Equal(t, "lists", filter[0])
+	assert.Equal(t, "IN", filter[1])
+	assert.Equal(t, []any{"SPR-001", "SPR-002"}, filter[2])
+}
+
+func TestConvertSquirrelFilters_INAndEquality_UsesArgsInOrder(t *testing.T) {
+	whereClause := "WHERE lists IN (?, ?) AND status = ?"
+	args := []any{"SPR-001", "SPR-002", "OPEN"}
+
+	filters := convertSquirrelFilters(whereClause, args)
+
+	require.Len(t, filters, 2)
+
+	inFilter := filters[0].([]any)
+	assert.Equal(t, "lists", inFilter[0])
+	assert.Equal(t, "IN", inFilter[1])
+	assert.Equal(t, []any{"SPR-001", "SPR-002"}, inFilter[2])
+
+	eqFilter := filters[1].([]any)
+	assert.Equal(t, "status", eqFilter[0])
+	assert.Equal(t, "==", eqFilter[1])
+	assert.Equal(t, "OPEN", eqFilter[2])
 }
 
 func TestParseSquirrelSQL_ExtractsFields(t *testing.T) {
