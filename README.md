@@ -240,6 +240,20 @@ EpicTasks(ctx, epicCode, fields)         // Get epic tasks
 Epics(ctx, kwargs)                       // List with custom filters
 ```
 
+### Documents
+```go
+Document(ctx, code, fields)                  // Get single document
+DocumentQuery(ctx, qb)                       // Query with QueryBuilder
+DocumentsList(ctx, qb)                       // List with QueryBuilder
+DocumentCount(ctx, qb)                       // Count documents
+ProjectDocuments(ctx, projectID, fields)     // Get project documents
+DocumentPageTree(ctx, nodeID)                // Get document page tree hierarchy
+DocumentCreate(ctx, params)                  // Create document
+DocumentUpdate(ctx, docID, updates)          // Update document
+DocumentDelete(ctx, docID)                   // Delete document
+Documents(ctx, kwargs)                       // List with custom filters
+```
+
 ### Comments
 ```go
 TaskComments(ctx, taskCode, fields)  // Get task comments
@@ -591,7 +605,7 @@ The MCP server provides 55+ tools for EVA Team operations:
 | **List** | `eva_list_list`, `eva_list_get`, `eva_list_create`, `eva_list_update`, `eva_list_close`, `eva_list_delete`, `eva_list_count` |
 | **Sprint** | `eva_sprint_list`, `eva_sprint_get` |
 | **Release** | `eva_release_list`, `eva_release_get` |
-| **Document** | `eva_document_list`, `eva_document_get`, `eva_document_create`, `eva_document_update`, `eva_document_delete`, `eva_document_count` |
+| **Document** | `eva_document_list`, `eva_document_get`, `eva_document_create`, `eva_document_update`, `eva_document_delete`, `eva_document_count`, `eva_document_page_tree` |
 | **Person** | `eva_person_list`, `eva_person_get`, `eva_person_count` |
 | **TimeLog** | `eva_timelog_list`, `eva_timelog_get`, `eva_timelog_create`, `eva_timelog_update`, `eva_timelog_delete`, `eva_timelog_count` |
 | **Comment** | `eva_comment_list`, `eva_comment_get`, `eva_comment_create`, `eva_comment_update`, `eva_comment_delete`, `eva_comment_count` |
@@ -609,6 +623,7 @@ Once configured, you can ask Claude:
 - "Get statistics for sprint SPR-001543"
 - "List all comments on task MYPROJ-123"
 - "Log 2 hours on task MYPROJ-456"
+- "Show document page tree for DOC-029978"
 
 ## Support
 
