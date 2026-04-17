@@ -313,6 +313,12 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 		Annotations: readOnlyAnnotations,
 	}, wrapHandler(r.Document.DocumentCount))
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_document_page_tree",
+		Description: "Get document page tree hierarchy by root node ID. Returns flat list with parent_id and tree_node_is_branch for building tree structure",
+		Annotations: readOnlyAnnotations,
+	}, wrapHandler(r.Document.DocumentPageTree))
+
 	// Person tools
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "eva_person_list",

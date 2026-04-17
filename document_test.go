@@ -170,6 +170,92 @@ func TestClient_Documents_Success_ReturnsDocuments(t *testing.T) {
 	assert.NotNil(t, meta)
 }
 
+func TestClient_DocumentPageTree_Success_ReturnsDocuments(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	respBody := `{
+		"jsonrpc": "2.2",
+		"result": [
+			{
+				"id": "CmfDocument:aaa",
+				"code": "DOC-001",
+				"name": "Architecture",
+				"parent_id": "CmfProject:123",
+				"project_id": "CmfProject:123",
+				"orderno": 101500,
+				"tree_node_is_branch": true,
+				"cache_status_type": "CLOSED"
+			},
+			{
+				"id": "CmfDocument:bbb",
+				"code": "DOC-002",
+				"name": "Spec Document",
+				"parent_id": "CmfDocument:aaa",
+				"project_id": "CmfProject:123",
+				"orderno": 103375,
+				"tree_node_is_branch": false,
+				"cache_status_type": "CLOSED"
+			}
+		],
+		"meta": {}
+	}`
+
+	mockHTTP.response = mockResponse(http.StatusOK, respBody)
+	mockHTTP.urlCheck = func(url string) bool {
+		return assert.Contains(t, url, "m=CmfDocument.macros_page_tree_get")
+	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		return assert.Contains(t, string(body), "CmfDocument:root-123")
+	}
+
+	docs, err := client.DocumentPageTree(testCtx, "CmfDocument:root-123")
+
+	require.NoError(t, err)
+	assert.Len(t, docs, 2)
+
+	assert.Equal(t, "CmfDocument:aaa", docs[0].ID)
+	assert.Equal(t, "Architecture", docs[0].Name)
+	assert.Equal(t, 101500, docs[0].OrderNo)
+	assert.True(t, docs[0].TreeNodeIsBranch)
+	assert.Equal(t, "CmfProject:123", docs[0].ParentID)
+
+	assert.Equal(t, "CmfDocument:bbb", docs[1].ID)
+	assert.False(t, docs[1].TreeNodeIsBranch)
+	assert.Equal(t, "CmfDocument:aaa", docs[1].ParentID)
+}
+
+func TestClient_DocumentPageTree_RPCError_ReturnsError(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	respBody := `{
+		"jsonrpc": "2.2",
+		"error": {
+			"code": -32000,
+			"message": "Node not found"
+		}
+	}`
+
+	mockHTTP.response = mockResponse(http.StatusOK, respBody)
+
+	docs, err := client.DocumentPageTree(testCtx, "CmfDocument:nonexistent")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Node not found")
+	assert.Nil(t, docs)
+}
+
+func TestClient_DocumentPageTree_HTTPError_ReturnsError(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	mockHTTP.err = errors.New("connection refused")
+
+	docs, err := client.DocumentPageTree(testCtx, "CmfDocument:123")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "connection refused")
+	assert.Nil(t, docs)
+}
+
 func TestClient_DocumentCreate_Success_ReturnsDocument(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 

@@ -22,8 +22,11 @@ type Document struct {
 	CacheStatusType string    `json:"cache_status_type,omitempty"`
 	CmfCreatedAt    time.Time `json:"cmf_created_at,omitempty"`
 	CmfModifiedAt   time.Time `json:"cmf_modified_at,omitempty"`
-	CmfOwnerID      string    `json:"cmf_owner_id,omitempty"`
-	CmfDeleted      bool      `json:"cmf_deleted,omitempty"`
+	CmfOwnerID       string `json:"cmf_owner_id,omitempty"`
+	CmfDeleted       bool   `json:"cmf_deleted,omitempty"`
+	OrderNo          int    `json:"orderno,omitempty"`
+	TreeNodeIsBranch bool   `json:"tree_node_is_branch,omitempty"`
+	WorkflowID       string `json:"workflow_id,omitempty"`
 }
 
 // DocumentResponse for Document.get (single document).

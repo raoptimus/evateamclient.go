@@ -89,6 +89,27 @@ func (d *DocumentTools) DocumentGet(ctx context.Context, input DocumentGetInput)
 	return doc, nil
 }
 
+// DocumentPageTreeInput represents input for eva_document_page_tree tool.
+type DocumentPageTreeInput struct {
+	NodeID string `json:"node_id"`
+}
+
+// DocumentPageTree retrieves the document page tree hierarchy.
+func (d *DocumentTools) DocumentPageTree(ctx context.Context, input DocumentPageTreeInput) (*ListResult, error) {
+	if input.NodeID == "" {
+		return nil, WrapError("document_page_tree", ErrInvalidInput)
+	}
+
+	docs, err := d.client.DocumentPageTree(ctx, input.NodeID)
+	if err != nil {
+		return nil, WrapError("document_page_tree", err)
+	}
+
+	return &ListResult{
+		Items: toAnySlice(docs),
+	}, nil
+}
+
 // DocumentCreateInput represents input for eva_document_create tool.
 type DocumentCreateInput struct {
 	Name      string `json:"name"`

@@ -320,6 +320,35 @@ func (c *Client) DocumentDelete(
 	return c.doRequest(ctx, reqBody, &resp)
 }
 
+// DocumentPageTree retrieves the document page tree hierarchy starting from the given node.
+// Returns a flat list of documents with parent_id and tree_node_is_branch fields
+// for building a tree structure.
+// Example:
+//
+//	docs, err := client.DocumentPageTree(ctx, "CmfDocument:uuid")
+func (c *Client) DocumentPageTree(
+	ctx context.Context,
+	nodeID string,
+) ([]models.Document, error) {
+	kwargs := map[string]any{
+		"node_id": nodeID,
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfDocument.macros_page_tree_get",
+		CallID:  newCallID(),
+		Kwargs:  kwargs,
+	}
+
+	var resp models.DocumentListResponse
+	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
+		return nil, err
+	}
+
+	return resp.Result, nil
+}
+
 // Backward compatible methods (using old API)
 
 // Documents retrieves documents with custom filters (backward compatible, deprecated)
