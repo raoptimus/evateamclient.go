@@ -152,7 +152,8 @@ type TaskCreateInput struct {
 	Executors   []string `json:"executors,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	Lists       []string `json:"lists,omitempty"`
-	EpicID      string   `json:"epic_id,omitempty"`
+	Epic        string   `json:"epic,omitempty"`
+	ParentTask  string   `json:"parent_task,omitempty"`
 	LogicTypeID string   `json:"logic_type_id,omitempty"`
 }
 
@@ -168,7 +169,8 @@ func (t *TaskTools) TaskCreate(ctx context.Context, input *TaskCreateInput) (any
 		Executors:   input.Executors,
 		Tags:        input.Tags,
 		Lists:       input.Lists,
-		EpicID:      input.EpicID,
+		Epic:        input.Epic,
+		ParentTask:  input.ParentTask,
 		LogicTypeID: input.LogicTypeID,
 	}
 
@@ -187,6 +189,10 @@ type TaskUpdateInput struct {
 
 	// Fields to update (any task field)
 	Updates map[string]any `json:"updates"`
+
+	// Tags to set on the task. Accepts tag codes (e.g. "TAG-000004").
+	// Replaces the existing tag list. Use eva_tag_list to find available tags.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // TaskUpdate updates an existing task.
@@ -195,7 +201,15 @@ func (t *TaskTools) TaskUpdate(ctx context.Context, input TaskUpdateInput) (any,
 		return nil, WrapError("task_update", ErrInvalidInput)
 	}
 
-	task, err := t.client.TaskUpdate(ctx, input.ID, input.Updates)
+	updates := input.Updates
+	if updates == nil {
+		updates = make(map[string]any)
+	}
+	if len(input.Tags) > 0 {
+		updates["tags"] = input.Tags
+	}
+
+	task, err := t.client.TaskUpdate(ctx, input.ID, updates)
 	if err != nil {
 		return nil, WrapError("task_update", err)
 	}

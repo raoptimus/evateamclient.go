@@ -20,4 +20,6 @@ const (
 	EntityFile          = "CmfRFile"
 	EntityAudit         = "CmfAudit"
 	EntityStatusHistory = "CmfStatusHistory"
+	EntityLogicType     = "CmfLogicType"
+	EntityTag           = "CmfTag"
 )

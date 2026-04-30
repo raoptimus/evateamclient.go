@@ -27,6 +27,7 @@ const (
 	TaskFieldProjectID       = "project_id"
 	TaskFieldParentID        = "parent_id"
 	TaskFieldParentTask      = "parent_task"
+	TaskFieldParentTaskID    = "parent_task_id"
 	TaskFieldCacheStatusType = "cache_status_type"
 	TaskFieldPriority        = "priority"
 	TaskFieldDeadline        = "deadline"
@@ -393,7 +394,14 @@ func (c *Client) Tasks(ctx context.Context, kwargs map[string]any) ([]models.Tas
 
 // CRUD Operations
 
-// TaskCreateParams contains parameters for creating a new task
+// TaskCreateParams contains parameters for creating a new task.
+//
+// ProjectID accepts a project ID (e.g. "CmfProject:uuid") or a project code
+// (e.g. "epud") — both are valid for the server's `parent` field.
+// Epic and ParentTask accept TASK CODES (e.g. "TASK-000777", "EPC-000123"),
+// not IDs, per the EVA API contract.
+// LogicTypeID accepts a LogicType ID (e.g. "CmfLogicType:uuid"); use
+// LogicTypeByCode to resolve a code to an ID.
 type TaskCreateParams struct {
 	Name        string   `json:"name"`
 	ProjectID   string   `json:"project_id"`
@@ -404,7 +412,8 @@ type TaskCreateParams struct {
 	Executors   []string `json:"executors,omitempty"`
 	Tags        []string `json:"tags,omitempty"`
 	Lists       []string `json:"lists,omitempty"` // sprints
-	EpicID      string   `json:"epic_id,omitempty"`
+	Epic        string   `json:"epic,omitempty"`
+	ParentTask  string   `json:"parent_task,omitempty"`
 	LogicTypeID string   `json:"logic_type_id,omitempty"`
 }
 
@@ -422,8 +431,8 @@ func (c *Client) TaskCreate(
 	params *TaskCreateParams,
 ) (*models.Task, error) {
 	kwargs := map[string]any{
-		"name":       params.Name,
-		"project_id": params.ProjectID,
+		"name":   params.Name,
+		"parent": params.ProjectID,
 	}
 
 	if params.Text != "" {
@@ -447,11 +456,14 @@ func (c *Client) TaskCreate(
 	if len(params.Lists) > 0 {
 		kwargs["lists"] = params.Lists
 	}
-	if params.EpicID != "" {
-		kwargs["epic_id"] = params.EpicID
+	if params.Epic != "" {
+		kwargs["epic"] = params.Epic
+	}
+	if params.ParentTask != "" {
+		kwargs["parent_task"] = params.ParentTask
 	}
 	if params.LogicTypeID != "" {
-		kwargs["logic_type_id"] = params.LogicTypeID
+		kwargs["logic_type"] = params.LogicTypeID
 	}
 
 	reqBody := &RPCRequest{
@@ -461,12 +473,27 @@ func (c *Client) TaskCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.TaskResponse
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  string `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
+	if resp.Result == "" {
+		return nil, errors.New("CmfTask.create returned empty id")
+	}
 
-	return &resp.Result, nil
+	qb := NewQueryBuilder().
+		Select(DefaultTaskFields...).
+		From(EntityTask).
+		Where(sq.Eq{TaskFieldID: resp.Result}).
+		Limit(1)
+	task, _, err := c.TaskQuery(ctx, qb)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "fetch created task %s", resp.Result)
+	}
+	return task, nil
 }
 
 // TaskUpdate updates an existing task
@@ -482,26 +509,39 @@ func (c *Client) TaskUpdate(
 	taskID string,
 	updates map[string]any,
 ) (*models.Task, error) {
-	kwargs := map[string]any{
-		"id": taskID,
-	}
-	for k, v := range updates {
-		kwargs[k] = v
+	if taskID == "" {
+		return nil, errors.New("taskID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTask.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{taskID},
+		Kwargs:  updates,
 	}
 
-	var resp models.TaskResponse
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  string `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
+	if resp.Result == "" {
+		return nil, errors.New("CmfTask.update returned empty id")
+	}
 
-	return &resp.Result, nil
+	qb := NewQueryBuilder().
+		Select(DefaultTaskFields...).
+		From(EntityTask).
+		Where(sq.Eq{TaskFieldID: resp.Result}).
+		Limit(1)
+	task, _, err := c.TaskQuery(ctx, qb)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "fetch updated task %s", resp.Result)
+	}
+	return task, nil
 }
 
 // TaskUpdateStatus updates task status (workflow transition)
@@ -526,20 +566,20 @@ func (c *Client) TaskDelete(
 	ctx context.Context,
 	taskID string,
 ) error {
-	kwargs := map[string]any{
-		"id": taskID,
+	if taskID == "" {
+		return errors.New("taskID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTask.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{taskID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

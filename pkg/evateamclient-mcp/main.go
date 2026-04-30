@@ -16,21 +16,24 @@
 //
 // Flags:
 //
-//	--api-url, -u    EVA Team API URL (env: EVA_API_URL) [required]
-//	--token, -t      API authentication token (env: EVA_API_TOKEN) [required]
-//	--debug, -d      Enable debug logging for API requests (env: EVA_DEBUG)
-//	--mcp-debug      Enable debug logging for MCP server (env: MCP_DEBUG)
-//	--timeout        API request timeout (env: EVA_TIMEOUT) [default: 30s]
+//	--api-url, -u         EVA Team API URL (env: EVA_API_URL) [required]
+//	--token, -t           API authentication token (env: EVA_API_TOKEN) [required]
+//	--debug, -d           Enable debug logging for API requests (env: EVA_DEBUG)
+//	--timeout             API request timeout (env: EVA_TIMEOUT) [default: 30s]
+//	--transport           Transport: stdio or http (env: MCP_TRANSPORT) [default: stdio]
+//	--http-addr           HTTP listen address (env: MCP_HTTP_ADDR) [default: 127.0.0.1:8080]
+//	--http-path           HTTP base path for MCP endpoint (env: MCP_HTTP_PATH) [default: /mcp]
+//	--http-stateless      Run HTTP transport in stateless mode (env: MCP_HTTP_STATELESS)
+//	--http-json-response  Return application/json instead of SSE (env: MCP_HTTP_JSON_RESPONSE)
 //
-// Usage:
+// Usage (stdio, for Claude Desktop / Claude Code CLI):
 //
 //	evateamclient-mcp --api-url="https://eva.example.com" --token="your-api-token"
 //
-// Or with environment variables:
+// Usage (HTTP, for Claude.ai custom connector via tunnel):
 //
-//	export EVA_API_URL="https://eva.example.com"
-//	export EVA_API_TOKEN="your-api-token"
-//	evateamclient-mcp
+//	evateamclient-mcp --transport=http --http-addr=127.0.0.1:8080 \
+//	    --api-url="https://eva.example.com" --token="your-api-token"
 package main
 
 import (
@@ -54,10 +57,23 @@ const (
 	serverName            = "evateamclient-mcp"
 	serverVersion         = "1.0.0"
 	defaultRequestTimeout = 30 * time.Second
+	defaultHTTPAddr       = "127.0.0.1:8080"
+	defaultHTTPPath       = "/mcp"
+	transportStdio        = "stdio"
+	transportHTTP         = "http"
 )
+
+type transportConfig struct {
+	Transport        string
+	HTTPAddr         string
+	HTTPPath         string
+	HTTPStateless    bool
+	HTTPJSONResponse bool
+}
 
 func main() {
 	cfg := &evateamclient.Config{}
+	tcfg := &transportConfig{}
 
 	cmd := &cli.Command{
 		Name:    serverName,
@@ -94,11 +110,44 @@ func main() {
 				Value:       defaultRequestTimeout,
 				Destination: &cfg.Timeout,
 			},
+			&cli.StringFlag{
+				Name:        "transport",
+				Usage:       "Transport: stdio or http",
+				Sources:     cli.EnvVars("MCP_TRANSPORT"),
+				Value:       transportStdio,
+				Destination: &tcfg.Transport,
+			},
+			&cli.StringFlag{
+				Name:        "http-addr",
+				Usage:       "HTTP listen address (used with --transport=http)",
+				Sources:     cli.EnvVars("MCP_HTTP_ADDR"),
+				Value:       defaultHTTPAddr,
+				Destination: &tcfg.HTTPAddr,
+			},
+			&cli.StringFlag{
+				Name:        "http-path",
+				Usage:       "HTTP base path for MCP endpoint (used with --transport=http)",
+				Sources:     cli.EnvVars("MCP_HTTP_PATH"),
+				Value:       defaultHTTPPath,
+				Destination: &tcfg.HTTPPath,
+			},
+			&cli.BoolFlag{
+				Name:        "http-stateless",
+				Usage:       "Run HTTP transport in stateless mode (used with --transport=http)",
+				Sources:     cli.EnvVars("MCP_HTTP_STATELESS"),
+				Destination: &tcfg.HTTPStateless,
+			},
+			&cli.BoolFlag{
+				Name:        "http-json-response",
+				Usage:       "Return application/json instead of SSE (used with --transport=http)",
+				Sources:     cli.EnvVars("MCP_HTTP_JSON_RESPONSE"),
+				Destination: &tcfg.HTTPJSONResponse,
+			},
 		},
 		Writer:    os.Stderr,
 		ErrWriter: os.Stderr,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runServer(ctx, cfg)
+			return runServer(ctx, cfg, tcfg)
 		},
 	}
 
@@ -107,7 +156,7 @@ func main() {
 	}
 }
 
-func runServer(ctx context.Context, cfg *evateamclient.Config) error {
+func runServer(ctx context.Context, cfg *evateamclient.Config, tcfg *transportConfig) error {
 	// Create logger
 	loggerLevel := slog.LevelWarn
 	if cfg.Debug {
@@ -154,10 +203,20 @@ func runServer(ctx context.Context, cfg *evateamclient.Config) error {
 		cancel()
 	}()
 
-	// Run server on stdio transport
-	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
-		return fmt.Errorf("server error: %w", err)
+	switch tcfg.Transport {
+	case transportStdio, "":
+		if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
+			return fmt.Errorf("server error: %w", err)
+		}
+		return nil
+	case transportHTTP:
+		return runHTTPServer(ctx, logger, server, httpOpts{
+			Addr:         tcfg.HTTPAddr,
+			Path:         tcfg.HTTPPath,
+			Stateless:    tcfg.HTTPStateless,
+			JSONResponse: tcfg.HTTPJSONResponse,
+		})
+	default:
+		return fmt.Errorf("unknown transport %q (use %q or %q)", tcfg.Transport, transportStdio, transportHTTP)
 	}
-
-	return nil
 }

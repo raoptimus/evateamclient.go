@@ -50,6 +50,8 @@ type Registry struct {
 	TaskLink      *TaskLinkTools
 	StatusHistory *StatusHistoryTools
 	Stats         *StatsTools
+	LogicType     *LogicTypeTools
+	Tag           *TagTools
 }
 
 // NewRegistry creates a new Registry with all tools initialized.
@@ -66,6 +68,8 @@ func NewRegistry(client *evateamclient.Client) *Registry {
 		TaskLink:      NewTaskLinkTools(client),
 		StatusHistory: NewStatusHistoryTools(client),
 		Stats:         NewStatsTools(client),
+		LogicType:     NewLogicTypeTools(client),
+		Tag:           NewTagTools(client),
 	}
 }
 
@@ -123,14 +127,21 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 	}, wrapHandler(r.Task.TaskGet))
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "eva_task_create",
-		Description: "Create a new task",
+		Name: "eva_task_create",
+		Description: "Create a new task. " +
+			"project_id accepts a project ID or code (e.g. 'epud'). " +
+			"epic and parent_task accept the parent's task ID. " +
+			"logic_type_id is required to set the task type — resolve a code via eva_logic_type_get. " +
+			"tags accepts tag codes (e.g. 'TAG-000004') — use eva_tag_list to find available tags.",
 		Annotations: writeAnnotations,
 	}, wrapHandler(r.Task.TaskCreate))
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "eva_task_update",
-		Description: "Update an existing task",
+		Name: "eva_task_update",
+		Description: "Update an existing task. " +
+			"Pass fields to change in updates (e.g. name, priority, deadline). " +
+			"To set tags, pass tags as tag codes (e.g. 'TAG-000004') — replaces existing tags. " +
+			"Use eva_tag_list to find available tags.",
 		Annotations: idempotentWriteAnnotations,
 	}, wrapHandler(r.Task.TaskUpdate))
 
@@ -505,4 +516,24 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 		Description: "Get KPI of closed sprint tasks by executor (requires project_code; if sprint_code is empty, aggregates across all project sprints; excludes tasks added during sprint)",
 		Annotations: readOnlyAnnotations,
 	}, wrapHandler(r.Stats.SprintExecutorsKPI))
+
+	// LogicType tools
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_logic_type_list",
+		Description: "List logic types (task subtypes like epic/story/task/bug). Filter by cmf_model_name (e.g. 'CmfTask') or code (e.g. 'task.epic:default')",
+		Annotations: readOnlyAnnotations,
+	}, wrapHandler(r.LogicType.LogicTypeList))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_logic_type_get",
+		Description: "Get a single logic type by code (e.g. 'task.epic:default', 'task.userstory:story', 'task.agile:task', 'task.bug:default'). Returns LogicType with ID for use as logic_type_id when creating tasks",
+		Annotations: readOnlyAnnotations,
+	}, wrapHandler(r.LogicType.LogicTypeGet))
+
+	// Tag tools
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "eva_tag_list",
+		Description: "List tags available for tasks. Returns tag code (e.g. 'TAG-000004') and name/aliases. Use tag code in the tags field of eva_task_create. Filter by project_id or name.",
+		Annotations: readOnlyAnnotations,
+	}, wrapHandler(r.Tag.TagList))
 }

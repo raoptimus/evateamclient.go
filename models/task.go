@@ -26,7 +26,8 @@ type TaskBrowse struct {
 	ProjectID            string    `json:"project_id,omitempty"`
 	ResponsibleID        string    `json:"responsible_id,omitempty"`
 	CacheChildTasksCount int       `json:"cache_child_tasks_count"`
-	ParentID             string    `json:"parent_id,omitempty"` // ParentID - project id
+	ParentID             string    `json:"parent_id,omitempty"`      // ParentID - project id
+	ParentTaskID         string    `json:"parent_task_id,omitempty"` // ID of parent task (for sub-tasks)
 	CmfOwnerID           string    `json:"cmf_owner_id"`
 	WorkflowID           string    `json:"workflow_id"`
 	StatusID             string    `json:"status_id,omitempty"`

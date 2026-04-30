@@ -20,3 +20,15 @@ type LogicType struct {
 	ACLFields    map[string]string `json:"_acl_fields,omitempty"`
 	ACLObj       string            `json:"_acl_obj,omitempty"`
 }
+
+type LogicTypeResponse struct {
+	JSONRPC string    `json:"jsonrpc"`
+	Result  LogicType `json:"result"`
+	Meta    Meta      `json:"meta"`
+}
+
+type LogicTypeListResponse struct {
+	JSONRPC string      `json:"jsonrpc"`
+	Result  []LogicType `json:"result"`
+	Meta    Meta        `json:"meta"`
+}

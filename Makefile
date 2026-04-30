@@ -6,6 +6,9 @@ LDFLAGS=-ldflags "-s -w \
 	-X main.GitBranch=${CI_COMMIT_BRANCH} \
 	-X main.GitCommit=${CI_COMMIT_SHORT_SHA}"
 
+EVA_API_URL?=
+EVA_API_TOKEN?=
+
 .DEFAULT_GOAL=help
 
 help: ## Show help message
@@ -22,6 +25,10 @@ test-integration: ## Run integration tests
 
 lint: ## Run linter
 	@golangci-lint run --timeout 5m
+
+evateam:
+	@evateamclient-mcp --transport=http --http-addr=127.0.0.1:8080 \
+		--api-url="$EVA_API_URL" --token="$EVA_API_TOKEN"
 
 install-mcp: ## Install evateamclient-mcp binary
 	@go install ${LDFLAGS} ./pkg/evateamclient-mcp

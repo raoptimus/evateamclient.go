@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -169,9 +170,10 @@ func TestClient_TaskCount_Success_ReturnsCount(t *testing.T) {
 }
 
 func TestClient_TaskCreate_Success_ReturnsTask(t *testing.T) {
-	client, mockHTTP := newTestClient(t)
+	client, mockHTTP := newTestClientWithSequentialMock(t)
 
-	respBody := `{
+	createResp := `{"jsonrpc":"2.2","result":"CmfTask:new-123"}`
+	getResp := `{
 		"jsonrpc": "2.2",
 		"result": {
 			"id": "CmfTask:new-123",
@@ -180,12 +182,9 @@ func TestClient_TaskCreate_Success_ReturnsTask(t *testing.T) {
 		}
 	}`
 
-	mockHTTP.response = mockResponse(http.StatusOK, respBody)
-	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=CmfTask.create")
-	}
-	mockHTTP.bodyCheck = func(body []byte) bool {
-		return assert.Contains(t, string(body), "New Task")
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, createResp),
+		mockResponse(http.StatusOK, getResp),
 	}
 
 	params := TaskCreateParams{
@@ -196,13 +195,16 @@ func TestClient_TaskCreate_Success_ReturnsTask(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "CmfTask:new-123", task.ID)
+	assert.Equal(t, "TASK-100", task.Code)
 	assert.Equal(t, "New Task", task.Name)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + get calls")
 }
 
 func TestClient_TaskUpdate_Success_ReturnsUpdatedTask(t *testing.T) {
-	client, mockHTTP := newTestClient(t)
+	client, mockHTTP := newTestClientWithSequentialMock(t)
 
-	respBody := `{
+	updateResp := `{"jsonrpc":"2.2","result":"CmfTask:123"}`
+	getResp := `{
 		"jsonrpc": "2.2",
 		"result": {
 			"id": "CmfTask:123",
@@ -211,12 +213,9 @@ func TestClient_TaskUpdate_Success_ReturnsUpdatedTask(t *testing.T) {
 		}
 	}`
 
-	mockHTTP.response = mockResponse(http.StatusOK, respBody)
-	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=CmfTask.update")
-	}
-	mockHTTP.bodyCheck = func(body []byte) bool {
-		return assert.Contains(t, string(body), "Updated Name")
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, updateResp),
+		mockResponse(http.StatusOK, getResp),
 	}
 
 	updates := map[string]any{"name": "Updated Name"}
@@ -224,6 +223,8 @@ func TestClient_TaskUpdate_Success_ReturnsUpdatedTask(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Name", task.Name)
+	assert.Equal(t, "CmfTask:123", task.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + get calls")
 }
 
 func TestClient_TaskDelete_Success_ReturnsNoError(t *testing.T) {

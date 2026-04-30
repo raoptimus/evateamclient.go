@@ -16,6 +16,8 @@ Production-grade Go client for [EVA Team](https://eva.team) JSON-RPC API. Fully 
 - Projects, Sprints, Tasks, Time Logs, Persons
 - Task Links, Epics, Comments, Documents
 - Status History tracking
+- Logic Types (task subtypes: epic, story, task, bug)
+- Tags (labels for tasks)
 - Statistics & aggregations
 - Full CRUD operations (Create, Read, Update, Delete)
 
@@ -238,6 +240,17 @@ ProjectTaskExecutors(ctx, projectCode)    // Get unique task executors
 ProjectEpics(ctx, projectCode, fields)   // Get project epics
 EpicTasks(ctx, epicCode, fields)         // Get epic tasks
 Epics(ctx, kwargs)                       // List with custom filters
+```
+
+### Logic Types
+```go
+LogicTypeList(ctx, qb)              // List logic types (subtypes like epic/story/task/bug)
+LogicTypeByCode(ctx, code)          // Get single logic type by code (e.g. "task.epic:default")
+```
+
+### Tags
+```go
+TagList(ctx, qb)                    // List tags available in the system
 ```
 
 ### Documents
@@ -481,6 +494,11 @@ evateamclient-mcp \
 | `--debug` | `-d` | `EVA_DEBUG` | Enable API request logging |
 | `--mcp-debug` | | `MCP_DEBUG` | Enable MCP server debug logging |
 | `--timeout` | | `EVA_TIMEOUT` | Request timeout (default: 30s) |
+| `--transport` | | `MCP_TRANSPORT` | Transport: `stdio` (default) or `http` |
+| `--http-addr` | | `MCP_HTTP_ADDR` | HTTP listen address (default: `127.0.0.1:8080`) |
+| `--http-path` | | `MCP_HTTP_PATH` | HTTP base path for MCP endpoint (default: `/mcp`) |
+| `--http-stateless` | | `MCP_HTTP_STATELESS` | Run HTTP transport in stateless mode |
+| `--http-json-response` | | `MCP_HTTP_JSON_RESPONSE` | Return `application/json` instead of SSE |
 
 **Environment Variables:**
 
@@ -594,9 +612,111 @@ claude mcp list
 # Should show: evateam: evateamclient-mcp  - ✓ Connected
 ```
 
+### HTTP transport (Streamable HTTP)
+
+Besides the default **stdio** transport, `evateamclient-mcp` can run as a **Remote MCP server** over HTTP using the [Streamable HTTP](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports) protocol from MCP spec 2025-03-26+. This enables integration with clients that connect to MCP servers via URL — most notably **Claude.ai web (cowork)**, which exposes only the "Add custom connector → Remote MCP server URL" form and cannot launch a local CLI.
+
+**HTTP-mode flags:**
+
+| Flag | Environment | Default | Description |
+|------|-------------|---------|-------------|
+| `--transport=http` | `MCP_TRANSPORT=http` | `stdio` | Switch from stdio to Streamable HTTP |
+| `--http-addr` | `MCP_HTTP_ADDR` | `127.0.0.1:8080` | Listen address (`host:port`) |
+| `--http-path` | `MCP_HTTP_PATH` | `/mcp` | Base path for the MCP endpoint |
+| `--http-stateless` | `MCP_HTTP_STATELESS` | `false` | Stateless mode: no session tracking, default init params per request |
+| `--http-json-response` | `MCP_HTTP_JSON_RESPONSE` | `false` | Return `application/json` instead of `text/event-stream` for responses |
+
+**Endpoints exposed:**
+
+- `POST/GET/DELETE <http-path>` — MCP Streamable HTTP endpoint (Claude.ai connects here)
+- `GET /healthz` — liveness probe, returns `ok`
+
+**Start the server:**
+
+```bash
+evateamclient-mcp \
+  --transport=http \
+  --http-addr=127.0.0.1:8080 \
+  --http-path=/mcp \
+  --api-url="https://eva.example.com" \
+  --token="your-api-token"
+```
+
+**Smoke test with curl:**
+
+```bash
+# Health check
+curl -i http://127.0.0.1:8080/healthz
+# HTTP/1.1 200 OK
+# ok
+
+# MCP initialize
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+        "protocolVersion":"2025-06-18",
+        "capabilities":{},
+        "clientInfo":{"name":"curl","version":"1"}
+      }}'
+# => SSE stream with JSON-RPC result; Mcp-Session-Id is returned in response headers.
+```
+
+### Usage with Claude.ai (cowork) — Remote MCP custom connector
+
+Claude.ai web (chat / cowork) accepts only **Remote MCP servers** reachable over the public internet from Anthropic's IP range `160.79.104.0/21`. There is no UI to launch a local stdio binary — you must expose the HTTP server through a public tunnel.
+
+For a corporate EVA Team API that is reachable only from your machine (VPN / corporate network), this means: run `evateamclient-mcp` **locally** in HTTP mode, tunnel `localhost:8080` to a public URL, and point Claude.ai at the tunnel URL. EVA traffic stays on your machine; only MCP traffic from Claude crosses the tunnel.
+
+**1. Start the HTTP server locally** (from the section above):
+
+```bash
+evateamclient-mcp --transport=http --http-addr=127.0.0.1:8080 \
+  --api-url="https://eva.example.com" --token="your-api-token"
+```
+
+**2. Expose via a public tunnel.** Any tool that gives an `https://…` URL pointing at `localhost:8080` works.
+
+```bash
+# Option A: ngrok
+ngrok http 8080
+# => Forwarding  https://<random>.ngrok.app -> http://localhost:8080
+
+# Option B: cloudflared
+cloudflared tunnel --url http://localhost:8080
+# => https://<random>.trycloudflare.com
+```
+
+**3. Register the connector in Claude.ai:**
+
+Open Claude.ai → *Settings* → *Connectors* → **Add custom connector** (BETA), then fill in:
+
+- **Name**: `EVA Team`
+- **Remote MCP server URL**: `https://<random>.ngrok.app/mcp`
+- **Advanced settings**: leave **OAuth Client ID** and **OAuth Client Secret** empty (authless mode — see security note below)
+
+Click *Add*. Claude will perform `initialize` and discover the tools (`eva_task_list`, `eva_project_list`, …). You can then ask Claude prompts like "List my open tasks in project MYPROJ".
+
+**4. Security: protect the public tunnel.** Once a tunnel URL is reachable from the internet, anyone who learns it can call EVA through **your** API token. Claude.ai does not support static bearer tokens for custom connectors, but you can use a hard-to-guess path segment as a shared secret:
+
+```bash
+SECRET=$(openssl rand -hex 16)
+evateamclient-mcp --transport=http --http-path="/mcp/$SECRET" \
+  --api-url="https://eva.example.com" --token="your-api-token"
+
+# Use https://<random>.ngrok.app/mcp/<SECRET> in Claude.ai's "Remote MCP server URL"
+```
+
+Built-in protections:
+- DNS rebinding protection is enabled by default for `127.0.0.1` / `[::1]` listeners.
+- Cross-Origin Protection is applied via `net/http.CrossOriginProtection`.
+
+> **Limitations.** Claude.ai custom connectors do **not** accept static `Authorization: Bearer …` tokens. For multi-tenant scenarios (each Claude user authenticates with their own EVA account) full **OAuth 2.0 / DCR** is required and is **not yet implemented** in this server. Single-user authless + secret path is the supported mode today.
+
 ### Available Tools
 
-The MCP server provides 55+ tools for EVA Team operations:
+The MCP server provides 67+ tools for EVA Team operations:
 
 | Resource | Tools |
 |----------|-------|
@@ -613,17 +733,22 @@ The MCP server provides 55+ tools for EVA Team operations:
 | **TaskLink** | `eva_tasklink_list`, `eva_tasklink_get`, `eva_tasklink_create`, `eva_tasklink_delete`, `eva_tasklink_count` |
 | **StatusHistory** | `eva_statushistory_list`, `eva_statushistory_get`, `eva_statushistory_count` |
 | **Stats** | `eva_stats_project`, `eva_stats_sprint`, `eva_stats_timespent`, `eva_stats_sprint_executors_kpi` |
+| **LogicType** | `eva_logic_type_list`, `eva_logic_type_get` |
+| **Tag** | `eva_tag_list` |
 
 ### Example Prompts
 
 Once configured, you can ask Claude:
 
 - "Show me all open tasks in project MYPROJ"
-- "Create a new task in project MYPROJ with name 'Fix login bug'"
+- "Create a new epic in project MYPROJ with name 'Q3 Auth Refactor'"
+- "Create a story under that epic tagged Frontend"
 - "Get statistics for sprint SPR-001543"
 - "List all comments on task MYPROJ-123"
 - "Log 2 hours on task MYPROJ-456"
 - "Show document page tree for DOC-029978"
+- "What logic types are available for tasks in this project?"
+- "List all tags in the system"
 
 ## Support
 

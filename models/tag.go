@@ -19,3 +19,9 @@ type Tag struct {
 	ProjectID  *string  `json:"project_id,omitempty"`
 	CmfOwnerID string   `json:"cmf_owner_id"`
 }
+
+type TagListResponse struct {
+	JSONRPC string `json:"jsonrpc"`
+	Result  []Tag  `json:"result"`
+	Meta    Meta   `json:"meta"`
+}
