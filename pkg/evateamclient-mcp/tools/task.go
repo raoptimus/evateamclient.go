@@ -43,6 +43,9 @@ type TaskListInput struct {
 
 	// Optional logic type ID filter (e.g., task type like "Target", "Epic", etc.)
 	LogicTypeID string `json:"logic_type_id,omitempty"`
+
+	// Optional task code filter (e.g., "UDMP-3305")
+	Code string `json:"code,omitempty"`
 }
 
 // TaskList returns a list of tasks matching filters.
@@ -71,6 +74,9 @@ func (t *TaskTools) TaskList(ctx context.Context, input *TaskListInput) (*ListRe
 	}
 	if input.LogicTypeID != "" {
 		filters = append(filters, []any{"logic_type_id", "==", input.LogicTypeID})
+	}
+	if input.Code != "" {
+		filters = append(filters, []any{"code", "==", input.Code})
 	}
 
 	// Sprint uses "contains" operator
@@ -150,7 +156,7 @@ type TaskCreateInput struct {
 	Deadline    string   `json:"deadline,omitempty"`
 	Responsible string   `json:"responsible,omitempty"`
 	Executors   []string `json:"executors,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
+	Tags        TagList  `json:"tags,omitempty"`
 	Lists       []string `json:"lists,omitempty"`
 	Epic        string   `json:"epic,omitempty"`
 	ParentTask  string   `json:"parent_task,omitempty"`
@@ -167,7 +173,7 @@ func (t *TaskTools) TaskCreate(ctx context.Context, input *TaskCreateInput) (any
 		Deadline:    input.Deadline,
 		Responsible: input.Responsible,
 		Executors:   input.Executors,
-		Tags:        input.Tags,
+		Tags:        []string(input.Tags),
 		Lists:       input.Lists,
 		Epic:        input.Epic,
 		ParentTask:  input.ParentTask,
@@ -187,12 +193,9 @@ type TaskUpdateInput struct {
 	// Task ID (required)
 	ID string `json:"id"`
 
-	// Fields to update (any task field)
+	// Fields to update (any task field). To update tags pass them as an array
+	// of tag codes: {"tags": ["TAG-000004"]}. Use eva_tag_list to find available tags.
 	Updates map[string]any `json:"updates"`
-
-	// Tags to set on the task. Accepts tag codes (e.g. "TAG-000004").
-	// Replaces the existing tag list. Use eva_tag_list to find available tags.
-	Tags []string `json:"tags,omitempty"`
 }
 
 // TaskUpdate updates an existing task.
@@ -205,8 +208,12 @@ func (t *TaskTools) TaskUpdate(ctx context.Context, input TaskUpdateInput) (any,
 	if updates == nil {
 		updates = make(map[string]any)
 	}
-	if len(input.Tags) > 0 {
-		updates["tags"] = input.Tags
+	if rawTags, ok := updates["tags"]; ok {
+		if tags := coerceTags(rawTags); len(tags) > 0 {
+			updates["tags"] = tags
+		} else {
+			delete(updates, "tags")
+		}
 	}
 
 	task, err := t.client.TaskUpdate(ctx, input.ID, updates)

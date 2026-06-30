@@ -720,7 +720,7 @@ The MCP server provides 67+ tools for EVA Team operations:
 
 | Resource | Tools |
 |----------|-------|
-| **Task** | `eva_task_list`, `eva_task_get`, `eva_task_create`, `eva_task_update`, `eva_task_delete`, `eva_task_update_status`, `eva_task_archive`, `eva_task_count` |
+| **Task** | `eva_task_list`, `eva_task_get`, `eva_task_create`, `eva_task_create_with_subtasks`, `eva_task_create_tree`, `eva_task_update`, `eva_task_delete`, `eva_task_update_status`, `eva_task_archive`, `eva_task_count` |
 | **Project** | `eva_project_list`, `eva_project_get`, `eva_project_create`, `eva_project_update`, `eva_project_delete`, `eva_project_add_executor`, `eva_project_remove_executor`, `eva_project_count` |
 | **List** | `eva_list_list`, `eva_list_get`, `eva_list_create`, `eva_list_update`, `eva_list_close`, `eva_list_delete`, `eva_list_count` |
 | **Sprint** | `eva_sprint_list`, `eva_sprint_get` |
@@ -743,6 +743,7 @@ Once configured, you can ask Claude:
 - "Show me all open tasks in project MYPROJ"
 - "Create a new epic in project MYPROJ with name 'Q3 Auth Refactor'"
 - "Create a story under that epic tagged Frontend"
+- "Create two epics, each with stories and their tasks, in one go" (uses `eva_task_create_tree`)
 - "Get statistics for sprint SPR-001543"
 - "List all comments on task MYPROJ-123"
 - "Log 2 hours on task MYPROJ-456"

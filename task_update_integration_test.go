@@ -103,3 +103,50 @@ func TestIntegration_TaskUpdate_EpicAndStory(t *testing.T) {
 		assert.Equal(t, epic.ID, fetched.EpicID, "epic link should be restored")
 	})
 }
+
+// TestIntegration_TaskUpdateStatus_PreservesEpic guards the known reset bug:
+// a status transition (e.g. to "Backlog") server-side resets the task's epic
+// back to the root epic. TaskUpdateStatus must preserve the original epic.
+func TestIntegration_TaskUpdateStatus_PreservesEpic(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	epicLT, err := c.LogicTypeByCode(ctx, LogicTypeCodeEpic)
+	require.NoError(t, err)
+	storyLT, err := c.LogicTypeByCode(ctx, LogicTypeCodeStory)
+	require.NoError(t, err)
+
+	suffix := time.Now().UnixNano()
+
+	epic, err := c.TaskCreate(ctx, &TaskCreateParams{
+		Name:        fmt.Sprintf("[TEST] status-epic %d", suffix),
+		ProjectID:   projectID,
+		LogicTypeID: epicLT.ID,
+		Priority:    1,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, epic.ID)
+	t.Cleanup(func() { _ = c.TaskDelete(context.Background(), epic.ID) })
+
+	story, err := c.TaskCreate(ctx, &TaskCreateParams{
+		Name:        fmt.Sprintf("[TEST] status-story %d", suffix),
+		ProjectID:   projectID,
+		Epic:        epic.ID,
+		LogicTypeID: storyLT.ID,
+		Priority:    2,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, story.ID)
+	t.Cleanup(func() { _ = c.TaskDelete(context.Background(), story.ID) })
+
+	// The empirically problematic transition.
+	_, err = c.TaskUpdateStatus(ctx, story.ID, "Backlog")
+	require.NoError(t, err)
+
+	fetched, _, err := c.EpicByID(ctx, story.ID, []string{
+		TaskFieldID, TaskFieldEpicID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, epic.ID, fetched.EpicID, "epic must survive the status transition")
+}

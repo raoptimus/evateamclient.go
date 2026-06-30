@@ -137,10 +137,33 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 	}, wrapHandler(r.Task.TaskCreate))
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name: "eva_task_create_with_subtasks",
+		Description: "Create a parent task and multiple child tasks in one call. " +
+			"Children are created in parallel (workers, default 3, max 10). " +
+			"Each child inherits project_id and gets parent_task set to the new parent. " +
+			"Returns parent and children as full task objects; failed children include an error field.",
+		Annotations: writeAnnotations,
+	}, wrapHandler(r.Task.TaskCreateWithSubtasks))
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "eva_task_create_tree",
+		Description: "Create a whole epic→story→task hierarchy in one call to save round-trips. " +
+			"Provide one or more epics in epics[], each with its stories, and the tasks nested under each story. " +
+			"epic_id chains up the hierarchy: a story's epic_id is its epic, a task's epic_id is its story; every task also gets parent_task set to its story. " +
+			"Optional status (per node, or a tree-wide default) is applied right after creation via a workflow transition that preserves epic_id (e.g. 'Backlog', 'OPEN', 'CLOSED'). " +
+			"Logic types are resolved automatically (epic/userstory/agile-task defaults); override per level with " +
+			"epic_logic_type/story_logic_type/task_logic_type (accepts a code or a CmfLogicType: ID). " +
+			"Stories and tasks are created in parallel (workers, default 3, max 10). " +
+			"Returns a compact tree of created ids/codes; failed nodes include an error field.",
+		Annotations: writeAnnotations,
+		InputSchema: taskCreateTreeInputSchema(),
+	}, wrapHandler(r.Task.TaskCreateTree))
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name: "eva_task_update",
 		Description: "Update an existing task. " +
 			"Pass fields to change in updates (e.g. name, priority, deadline). " +
-			"To set tags, pass tags as tag codes (e.g. 'TAG-000004') — replaces existing tags. " +
+			"To set tags pass an array of tag codes in updates: {\"tags\": [\"TAG-000004\"]}. " +
 			"Use eva_tag_list to find available tags.",
 		Annotations: idempotentWriteAnnotations,
 	}, wrapHandler(r.Task.TaskUpdate))

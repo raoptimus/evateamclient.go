@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/google/jsonschema-go v0.4.2
 	github.com/imroc/req/v3 v3.57.0
 	github.com/json-iterator/go v1.1.12
 	github.com/modelcontextprotocol/go-sdk v1.5.0
@@ -21,7 +22,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/icholy/digest v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/kr/text v0.2.0 // indirect

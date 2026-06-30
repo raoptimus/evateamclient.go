@@ -9,7 +9,10 @@
 package tools
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/raoptimus/evateamclient.go"
@@ -132,6 +135,70 @@ func BuildKwargs(input *QueryInput) map[string]any {
 	}
 
 	return kwargs
+}
+
+// TagList is a list of tag codes that tolerates both a JSON array
+// (["TAG-001"]) and a JSON-encoded string ("[\"TAG-001\"]") on input,
+// since some MCP clients serialise array arguments as strings.
+type TagList []string
+
+func (tl *TagList) UnmarshalJSON(data []byte) error {
+	var v any
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*tl = coerceTags(v)
+	return nil
+}
+
+// coerceTags converts an unknown tags value to []string.
+// Handles []string, []any (JSON array), and string (JSON-encoded array).
+func coerceTags(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		tags := make([]string, 0, len(t))
+		for _, item := range t {
+			if s, ok := item.(string); ok {
+				tags = append(tags, s)
+			}
+		}
+		return tags
+	case string:
+		var tags []string
+		if err := json.Unmarshal([]byte(t), &tags); err == nil {
+			return tags
+		}
+	}
+	return nil
+}
+
+// unmarshalFlexibleSlice unmarshals data into *out, tolerating a JSON-encoded
+// string in place of a JSON array — some MCP clients serialise array arguments
+// (including nested ones) as strings. An empty string yields a nil slice.
+func unmarshalFlexibleSlice[T any](data []byte, out *[]T) error {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(trimmed, &s); err != nil {
+			return err
+		}
+		if strings.TrimSpace(s) == "" {
+			*out = nil
+			return nil
+		}
+		return json.Unmarshal([]byte(s), out)
+	}
+	return json.Unmarshal(data, out)
+}
+
+// StringList is a []string that tolerates a JSON-encoded string on input,
+// the same way TagList does, for MCP clients that stringify array arguments.
+type StringList []string
+
+func (l *StringList) UnmarshalJSON(data []byte) error {
+	return unmarshalFlexibleSlice(data, (*[]string)(l))
 }
 
 // toAnySlice converts typed slice to []any

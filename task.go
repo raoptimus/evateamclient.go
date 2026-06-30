@@ -544,7 +544,14 @@ func (c *Client) TaskUpdate(
 	return task, nil
 }
 
-// TaskUpdateStatus updates task status (workflow transition)
+// TaskUpdateStatus updates task status (workflow transition).
+//
+// A status transition on the EvaTeam side may have a server-side side-effect of
+// resetting the task's epic back to the root epic. To preserve the link, the
+// epic is read before the transition and restored afterwards if it was changed.
+// This costs one extra read always, and one extra write only when a reset is
+// detected. Tasks without an epic are left untouched.
+//
 // Example:
 //
 //	task, err := client.TaskUpdateStatus(ctx, "CmfTask:uuid", "CLOSED")
@@ -553,9 +560,32 @@ func (c *Client) TaskUpdateStatus(
 	taskID string,
 	status string,
 ) (*models.Task, error) {
-	return c.TaskUpdate(ctx, taskID, map[string]any{
-		"cache_status_type": status,
-	})
+	if taskID == "" {
+		return nil, errors.New("taskID is required")
+	}
+
+	// Read the current epic before the workflow transition, which may reset it.
+	before, _, err := c.EpicByID(ctx, taskID, []string{TaskFieldID, TaskFieldEpicID})
+	if err != nil {
+		return nil, errors.WithMessagef(err, "read epic before status update %s", taskID)
+	}
+	originalEpicID := before.EpicID
+
+	updated, err := c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldCacheStatusType: status})
+	if err != nil {
+		return nil, err
+	}
+
+	// Restore the epic only if it existed and the transition changed/reset it.
+	if originalEpicID != "" && updated.EpicID != originalEpicID {
+		restored, err := c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldEpic: originalEpicID})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "restore epic %s after status update %s", originalEpicID, taskID)
+		}
+		return restored, nil
+	}
+
+	return updated, nil
 }
 
 // TaskDelete deletes a task by ID
