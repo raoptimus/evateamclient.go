@@ -83,21 +83,21 @@ func (t *TaskTools) TaskCreateWithSubtasks(ctx context.Context, input *TaskCreat
 
 	workers := input.Workers
 	if workers <= 0 {
-		workers = 3
+		workers = defaultTreeWorkers
 	}
-	if workers > 10 {
-		workers = 10
+	if workers > maxTreeWorkers {
+		workers = maxTreeWorkers
 	}
 
 	results := make([]*ChildTaskResult, len(input.Children))
-	for i, child := range input.Children {
-		results[i] = &ChildTaskResult{Task: models.Task{TaskBrowse: models.TaskBrowse{Name: child.Name}}}
+	for i := range input.Children {
+		results[i] = &ChildTaskResult{Task: models.Task{TaskBrowse: models.TaskBrowse{Name: input.Children[i].Name}}}
 	}
 
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 
-	for i, child := range input.Children {
+	for i := range input.Children {
 		wg.Add(1)
 		go func(i int, child ChildTaskInput) {
 			defer wg.Done()
@@ -122,7 +122,7 @@ func (t *TaskTools) TaskCreateWithSubtasks(ctx context.Context, input *TaskCreat
 			} else {
 				results[i].Task = *task
 			}
-		}(i, child)
+		}(i, input.Children[i])
 	}
 
 	wg.Wait()
