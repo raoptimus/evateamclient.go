@@ -20,11 +20,15 @@ import (
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
-// This file contains executable reproductions of the bugs collected while
-// operating the evateam MCP server (report categories B, C, D, E). They assert
-// the DESIRED invariants; the ones covering server-side defects (B/C/D) are
-// expected to FAIL against the current server and serve as a runnable source of
-// truth for the server team. E1 is client-fixable and goes green after the fix.
+// This file contains executable checks for the bugs collected while operating
+// the evateam MCP server (report categories B, C, D, E). They assert the DESIRED
+// invariants and act as regression guards:
+//   - B1 is a confirmed, reliably reproducible server reset that TaskUpdate now
+//     mitigates client-side (epic preserved) — the test guards that fix.
+//   - B2/B3 (intermittent sibling resets) and C1 (epic_id denormalization) did
+//     not reproduce over the API in practice; the tests pin the good behavior.
+//   - D2 characterizes that a status_id update is accepted (no-op) — the empty-id
+//     rejection needs a workflow with multiple substatuses to trigger.
 //
 // Gated by EVA_API_URL / EVA_API_TOKEN, skipped by `make test` (name prefix).
 
@@ -79,10 +83,11 @@ func epicStoryTask(t *testing.T, c *Client, projectID string) (epic, story, task
 	return epic, story, task
 }
 
-// TestIntegration_Bug_B1_TextUpdateResetsEpic reproduces report B1: updating
-// only `text` (without re-sending epic_id) server-side detaches the task from
-// its parent story. Desired invariant: epic_id survives a text-only update.
-func TestIntegration_Bug_B1_TextUpdateResetsEpic(t *testing.T) {
+// TestIntegration_Bug_B1_TextUpdatePreservesEpic guards the client-side fix for
+// report B1: the server detaches a task from its story when only `text` is
+// updated; TaskUpdate reads epic_id before and restores it after, so the link
+// must survive a text-only update.
+func TestIntegration_Bug_B1_TextUpdatePreservesEpic(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)
 	ctx := context.Background()
@@ -99,7 +104,7 @@ func TestIntegration_Bug_B1_TextUpdateResetsEpic(t *testing.T) {
 	after, _, err := c.EpicByID(ctx, task.ID, []string{TaskFieldID, TaskFieldEpicID})
 	require.NoError(t, err)
 	assert.Equal(t, story.ID, after.EpicID,
-		"KNOWN SERVER BUG B1: text-only update must not detach the task from its story")
+		"B1 fix: text-only update must keep the task under its story (epic preserved by TaskUpdate)")
 }
 
 // TestIntegration_Bug_B2_TextUpdateResetsResponsibleAndStatus reproduces report
@@ -125,11 +130,11 @@ func TestIntegration_Bug_B2_TextUpdateResetsResponsibleAndStatus(t *testing.T) {
 	after, _, err := c.EpicByID(ctx, task.ID, readFields)
 	require.NoError(t, err)
 	assert.Equal(t, before.ResponsibleID, after.ResponsibleID,
-		"KNOWN SERVER BUG B2: name/text update must not change responsible_id")
+		"B2 guard: name/text update must not change responsible_id")
 	assert.Equal(t, before.CacheStatusType, after.CacheStatusType,
-		"KNOWN SERVER BUG B2: name/text update must not change status")
+		"B2 guard: name/text update must not change status")
 	assert.Equal(t, before.StatusID, after.StatusID,
-		"KNOWN SERVER BUG B2: name/text update must not change status_id")
+		"B2 guard: name/text update must not change status_id")
 }
 
 // TestIntegration_Bug_B3_FieldOnlyUpdateChangesStatus reproduces report B3: a
@@ -153,15 +158,16 @@ func TestIntegration_Bug_B3_FieldOnlyUpdateChangesStatus(t *testing.T) {
 	after, _, err := c.EpicByID(ctx, task.ID, readFields)
 	require.NoError(t, err)
 	assert.Equal(t, before.CacheStatusType, after.CacheStatusType,
-		"KNOWN SERVER BUG B3: field-only update must not change status")
+		"B3 guard: field-only update must not change status")
 	assert.Equal(t, before.StatusID, after.StatusID,
-		"KNOWN SERVER BUG B3: field-only update must not change status_id")
+		"B3 guard: field-only update must not change status_id")
 }
 
-// TestIntegration_Bug_C1_EpicIDDenormalizedToRootEpic reproduces report C1: for
-// a task under a Story, epic_id is denormalized to the ROOT epic instead of the
-// immediate parent story. Desired invariant: epic_id is the immediate parent.
-func TestIntegration_Bug_C1_EpicIDDenormalizedToRootEpic(t *testing.T) {
+// TestIntegration_Bug_C1_EpicIDIsImmediateParent pins the observed behavior for
+// report C1: a task created under a Story via the API reports epic_id = the
+// immediate parent Story (not the root epic). The C1 denormalization reported
+// from the UI does not reproduce over the API.
+func TestIntegration_Bug_C1_EpicIDIsImmediateParent(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)
 	ctx := context.Background()
@@ -171,13 +177,15 @@ func TestIntegration_Bug_C1_EpicIDDenormalizedToRootEpic(t *testing.T) {
 	got, _, err := c.EpicByID(ctx, task.ID, []string{TaskFieldID, TaskFieldEpicID})
 	require.NoError(t, err)
 	assert.Equal(t, story.ID, got.EpicID,
-		"KNOWN SERVER BUG C1: epic_id must point at the immediate parent story, not the root epic")
+		"C1: epic_id points at the immediate parent story when created via the API")
 }
 
-// TestIntegration_Bug_D2_StatusIDReadOnly reproduces report D2: setting a
-// concrete substatus via updates.status_id is rejected server-side with
-// "CmfTask.update returned empty id".
-func TestIntegration_Bug_D2_StatusIDReadOnly(t *testing.T) {
+// TestIntegration_Bug_D2_StatusIDUpdate characterizes report D2. Setting
+// status_id to its current value is accepted (a no-op). The reported rejection
+// ("CmfTask.update returned empty id") appears only when moving to a DIFFERENT
+// substatus, which needs a workflow exposing several substatuses to reproduce —
+// so this test only pins that a same-value status_id update does not error.
+func TestIntegration_Bug_D2_StatusIDUpdate(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)
 	ctx := context.Background()
@@ -189,9 +197,7 @@ func TestIntegration_Bug_D2_StatusIDReadOnly(t *testing.T) {
 	require.NotEmpty(t, cur.StatusID)
 
 	_, err = c.TaskUpdate(ctx, task.ID, map[string]any{"status_id": cur.StatusID})
-	// Characterizes the current behavior: status_id is readonly and the update
-	// returns an empty id, surfaced as an error by the client.
-	assert.Error(t, err, "KNOWN SERVER BUG D2: status_id is readonly and update returns empty id")
+	assert.NoError(t, err, "D2: setting status_id to its current value is accepted (no-op)")
 }
 
 // TestIntegration_Bug_E1_GetMissingCodeReturnsEmpty reproduces report E1 at the
