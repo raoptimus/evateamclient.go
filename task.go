@@ -109,6 +109,7 @@ var (
 		TaskFieldExecutors,
 		TaskFieldWaitingFor,
 		TaskFieldParentID,
+		TaskFieldParentTaskID,
 		TaskFieldFixVersions,
 		TaskFieldAgileStoryPoints,
 		TaskFieldComponents,
@@ -127,6 +128,7 @@ var (
 		TaskFieldDeadline,
 		TaskFieldResponsibleID,
 		TaskFieldEpicID,
+		TaskFieldParentTaskID,
 		TaskFieldAgileStoryPoints,
 		TaskFieldStatusID,
 	}

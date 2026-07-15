@@ -163,21 +163,23 @@ func TestIntegration_Bug_B3_FieldOnlyUpdateChangesStatus(t *testing.T) {
 		"B3 guard: field-only update must not change status_id")
 }
 
-// TestIntegration_Bug_C1_EpicIDIsImmediateParent pins the observed behavior for
-// report C1: a task created under a Story via the API reports epic_id = the
-// immediate parent Story (not the root epic). The C1 denormalization reported
-// from the UI does not reproduce over the API.
-func TestIntegration_Bug_C1_EpicIDIsImmediateParent(t *testing.T) {
+// TestIntegration_Bug_C1_ParentStoryVisible addresses report C1: epic_id is an
+// unreliable, server-denormalized signal (it may read back as the root epic), so
+// the task↔story nesting must be discoverable via parent_task_id instead. This
+// guards that the DEFAULT read projection exposes parent_task_id = the immediate
+// story, which is stable across updates (unlike epic_id).
+func TestIntegration_Bug_C1_ParentStoryVisible(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)
 	ctx := context.Background()
 
 	_, story, task := epicStoryTask(t, c, projectID)
 
-	got, _, err := c.EpicByID(ctx, task.ID, []string{TaskFieldID, TaskFieldEpicID})
+	// nil fields → DefaultTaskFields, which must now include parent_task_id.
+	got, _, err := c.Task(ctx, task.Code, nil)
 	require.NoError(t, err)
-	assert.Equal(t, story.ID, got.EpicID,
-		"C1: epic_id points at the immediate parent story when created via the API")
+	assert.Equal(t, story.ID, got.ParentTaskID,
+		"C1: parent_task_id must expose the immediate parent story in the default projection")
 }
 
 // TestIntegration_Bug_D2_StatusIDUpdate characterizes report D2. Setting

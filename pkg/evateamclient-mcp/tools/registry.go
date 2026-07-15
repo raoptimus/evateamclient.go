@@ -159,8 +159,8 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 		Name: "eva_task_get",
 		Description: "Get a single task by code (e.g., 'PROJ-123') or ID. " +
 			"Returns a not-found error for a non-existent code/id. " +
-			"KNOWN SERVER ISSUE: for a task under a Story, epic_id/epic returns the ROOT epic, " +
-			"not the immediate parent Story.",
+			"To find which Story/task a task hangs under, use parent_task_id (stable) — " +
+			"epic_id is server-denormalized and may read back as the ROOT epic, not the immediate parent.",
 		Annotations: readOnlyAnnotations,
 	}, r.Task.TaskGet)
 
