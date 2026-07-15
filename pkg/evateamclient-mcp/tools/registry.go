@@ -156,8 +156,11 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 	}, r.Task.TaskList)
 
 	addTool(server, &mcp.Tool{
-		Name:        "eva_task_get",
-		Description: "Get a single task by code (e.g., 'PROJ-123') or ID",
+		Name: "eva_task_get",
+		Description: "Get a single task by code (e.g., 'PROJ-123') or ID. " +
+			"Returns a not-found error for a non-existent code/id. " +
+			"KNOWN SERVER ISSUE: for a task under a Story, epic_id/epic returns the ROOT epic, " +
+			"not the immediate parent Story.",
 		Annotations: readOnlyAnnotations,
 	}, r.Task.TaskGet)
 
@@ -199,7 +202,10 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 		Description: "Update an existing task. " +
 			"Pass fields to change in updates (e.g. name, priority, deadline). " +
 			"To set tags pass an array of tag codes in updates: {\"tags\": [\"TAG-000004\"]}. " +
-			"Use eva_tag_list to find available tags.",
+			"Use eva_tag_list to find available tags. " +
+			"KNOWN SERVER ISSUE: a partial update may reset fields you did not send " +
+			"(epic_id to the root epic, responsible_id, status) — re-read the task afterwards, " +
+			"and when changing name/text re-send epic_id in the same call.",
 		Annotations: idempotentWriteAnnotations,
 	}, r.Task.TaskUpdate)
 
@@ -210,8 +216,11 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 	}, r.Task.TaskDelete)
 
 	addTool(server, &mcp.Tool{
-		Name:        "eva_task_update_status",
-		Description: "Update task status (OPEN, IN_PROGRESS, CLOSED)",
+		Name: "eva_task_update_status",
+		Description: "Update task status. Accepts OPEN, IN_PROGRESS, CLOSED (and 'Backlog'); " +
+			"moves to the first substatus of that type, not a specific substatus. " +
+			"Preserves epic_id across the transition. A concrete substatus via " +
+			"eva_task_update updates.status_id is not supported (status_id is readonly).",
 		Annotations: idempotentWriteAnnotations,
 	}, r.Task.TaskUpdateStatus)
 
