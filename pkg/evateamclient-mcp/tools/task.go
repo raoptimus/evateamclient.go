@@ -115,7 +115,7 @@ type TaskGetInput struct {
 	ID string `json:"id,omitempty"`
 
 	// Fields to return
-	Fields []string `json:"fields,omitempty"`
+	Fields StringList `json:"fields,omitempty"`
 }
 
 // TaskGet retrieves a single task by code or ID.
@@ -149,18 +149,18 @@ func (t *TaskTools) TaskGet(ctx context.Context, input *TaskGetInput) (any, erro
 
 // TaskCreateInput represents input for eva_task_create tool.
 type TaskCreateInput struct {
-	Name        string   `json:"name"`
-	ProjectID   string   `json:"project_id"`
-	Text        string   `json:"text,omitempty"`
-	Priority    int      `json:"priority,omitempty"`
-	Deadline    string   `json:"deadline,omitempty"`
-	Responsible string   `json:"responsible,omitempty"`
-	Executors   []string `json:"executors,omitempty"`
-	Tags        TagList  `json:"tags,omitempty"`
-	Lists       []string `json:"lists,omitempty"`
-	Epic        string   `json:"epic,omitempty"`
-	ParentTask  string   `json:"parent_task,omitempty"`
-	LogicTypeID string   `json:"logic_type_id,omitempty"`
+	Name        string     `json:"name"`
+	ProjectID   string     `json:"project_id"`
+	Text        string     `json:"text,omitempty"`
+	Priority    int        `json:"priority,omitempty"`
+	Deadline    string     `json:"deadline,omitempty"`
+	Responsible string     `json:"responsible,omitempty"`
+	Executors   StringList `json:"executors,omitempty"`
+	Tags        TagList    `json:"tags,omitempty"`
+	Lists       StringList `json:"lists,omitempty"`
+	Epic        string     `json:"epic,omitempty"`
+	ParentTask  string     `json:"parent_task,omitempty"`
+	LogicTypeID string     `json:"logic_type_id,omitempty"`
 }
 
 // TaskCreate creates a new task.
