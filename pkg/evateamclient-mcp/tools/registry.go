@@ -203,9 +203,9 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 			"Pass fields to change in updates (e.g. name, priority, deadline). " +
 			"To set tags pass an array of tag codes in updates: {\"tags\": [\"TAG-000004\"]}. " +
 			"Use eva_tag_list to find available tags. " +
-			"KNOWN SERVER ISSUE: a partial update may reset fields you did not send " +
-			"(epic_id to the root epic, responsible_id, status) — re-read the task afterwards, " +
-			"and when changing name/text re-send epic_id in the same call.",
+			"epic_id is preserved automatically (the server may otherwise reset it on a partial " +
+			"update); to move a task, pass epic explicitly. KNOWN SERVER ISSUE: a partial update " +
+			"may still occasionally reset responsible_id or status — verify the result if those matter.",
 		Annotations: idempotentWriteAnnotations,
 	}, r.Task.TaskUpdate)
 
