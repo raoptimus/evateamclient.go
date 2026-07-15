@@ -11,7 +11,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/raoptimus/evateamclient.go"
 )
@@ -111,22 +113,58 @@ func wrapHandler[In, Out any](handler func(context.Context, In) (Out, error)) fu
 	}
 }
 
+// addTool registers a typed handler, defaulting its input schema to one that
+// tolerates JSON-encoded strings in place of arrays (see relaxArraySchema).
+// Many MCP clients stringify array arguments; without the relaxed schema the
+// SDK rejects them before the handler runs. A tool that sets InputSchema
+// explicitly (e.g. eva_task_create_tree) keeps its own schema.
+func addTool[In, Out any](
+	server *mcp.Server,
+	tool *mcp.Tool,
+	handler func(context.Context, In) (Out, error),
+) {
+	if tool.InputSchema == nil {
+		tool.InputSchema = relaxedInputSchema[In]()
+	}
+	mcp.AddTool(server, tool, wrapHandler(handler))
+}
+
+// relaxedInputSchema builds the JSON schema for the input type In and relaxes
+// every array node to also accept a JSON-encoded string. Pointer types are
+// dereferenced. Panics on failure since the type is fixed and reflection is
+// deterministic.
+func relaxedInputSchema[In any]() *jsonschema.Schema {
+	t := reflect.TypeFor[In]()
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	s, err := jsonschema.ForType(t, &jsonschema.ForOptions{})
+	if err != nil {
+		panic("build input schema for " + t.String() + ": " + err.Error())
+	}
+	relaxArraySchema(s)
+	return s
+}
+
 // RegisterAll registers all tools with the MCP server.
 func (r *Registry) RegisterAll(server *mcp.Server) {
 	// Task tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_task_list",
 		Description: "List tasks with optional filters (project, status, sprint, responsible)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Task.TaskList))
+	}, r.Task.TaskList)
 
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "eva_task_get",
-		Description: "Get a single task by code (e.g., 'PROJ-123') or ID",
+	addTool(server, &mcp.Tool{
+		Name: "eva_task_get",
+		Description: "Get a single task by code (e.g., 'PROJ-123') or ID. " +
+			"Returns a not-found error for a non-existent code/id. " +
+			"To find which Story/task a task hangs under, use parent_task_id (stable) — " +
+			"epic_id is server-denormalized and may read back as the ROOT epic, not the immediate parent.",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Task.TaskGet))
+	}, r.Task.TaskGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name: "eva_task_create",
 		Description: "Create a new task. " +
 			"project_id accepts a project ID or code (e.g. 'epud'). " +
@@ -134,18 +172,18 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 			"logic_type_id is required to set the task type — resolve a code via eva_logic_type_get. " +
 			"tags accepts tag codes (e.g. 'TAG-000004') — use eva_tag_list to find available tags.",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Task.TaskCreate))
+	}, r.Task.TaskCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name: "eva_task_create_with_subtasks",
 		Description: "Create a parent task and multiple child tasks in one call. " +
 			"Children are created in parallel (workers, default 3, max 10). " +
 			"Each child inherits project_id and gets parent_task set to the new parent. " +
 			"Returns parent and children as full task objects; failed children include an error field.",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Task.TaskCreateWithSubtasks))
+	}, r.Task.TaskCreateWithSubtasks)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name: "eva_task_create_tree",
 		Description: "Create a whole epic→story→task hierarchy in one call to save round-trips. " +
 			"Provide one or more epics in epics[], each with its stories, and the tasks nested under each story. " +
@@ -157,406 +195,412 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 			"Returns a compact tree of created ids/codes; failed nodes include an error field.",
 		Annotations: writeAnnotations,
 		InputSchema: taskCreateTreeInputSchema(),
-	}, wrapHandler(r.Task.TaskCreateTree))
+	}, r.Task.TaskCreateTree)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name: "eva_task_update",
 		Description: "Update an existing task. " +
 			"Pass fields to change in updates (e.g. name, priority, deadline). " +
 			"To set tags pass an array of tag codes in updates: {\"tags\": [\"TAG-000004\"]}. " +
-			"Use eva_tag_list to find available tags.",
+			"Use eva_tag_list to find available tags. " +
+			"epic_id is preserved automatically (the server may otherwise reset it on a partial " +
+			"update); to move a task, pass epic explicitly. KNOWN SERVER ISSUE: a partial update " +
+			"may still occasionally reset responsible_id or status — verify the result if those matter.",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.Task.TaskUpdate))
+	}, r.Task.TaskUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_task_delete",
 		Description: "Delete a task",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.Task.TaskDelete))
+	}, r.Task.TaskDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "eva_task_update_status",
-		Description: "Update task status (OPEN, IN_PROGRESS, CLOSED)",
+	addTool(server, &mcp.Tool{
+		Name: "eva_task_update_status",
+		Description: "Update task status. Accepts OPEN, IN_PROGRESS, CLOSED (and 'Backlog'); " +
+			"moves to the first substatus of that type, not a specific substatus. " +
+			"Preserves epic_id across the transition. A concrete substatus via " +
+			"eva_task_update updates.status_id is not supported (status_id is readonly).",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.Task.TaskUpdateStatus))
+	}, r.Task.TaskUpdateStatus)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_task_archive",
 		Description: "Archive a task (soft delete)",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.Task.TaskArchive))
+	}, r.Task.TaskArchive)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_task_count",
 		Description: "Count tasks matching filters",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Task.TaskCount))
+	}, r.Task.TaskCount)
 
 	// Project tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_list",
 		Description: "List projects",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Project.ProjectList))
+	}, r.Project.ProjectList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_get",
 		Description: "Get a single project by code or ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Project.ProjectGet))
+	}, r.Project.ProjectGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_create",
 		Description: "Create a new project",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Project.ProjectCreate))
+	}, r.Project.ProjectCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_update",
 		Description: "Update an existing project",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.Project.ProjectUpdate))
+	}, r.Project.ProjectUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_delete",
 		Description: "Delete a project",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.Project.ProjectDelete))
+	}, r.Project.ProjectDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_add_executor",
 		Description: "Add an executor to a project",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Project.ProjectAddExecutor))
+	}, r.Project.ProjectAddExecutor)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_remove_executor",
 		Description: "Remove an executor from a project",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Project.ProjectRemoveExecutor))
+	}, r.Project.ProjectRemoveExecutor)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_project_count",
 		Description: "Count projects",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Project.ProjectCount))
+	}, r.Project.ProjectCount)
 
 	// List tools (sprints/releases)
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_list",
 		Description: "List all lists (sprints and releases) with optional filters",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.ListList))
+	}, r.List.ListList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_get",
 		Description: "Get a single list by code (e.g., 'SPR-001543') or ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.ListGet))
+	}, r.List.ListGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_create",
 		Description: "Create a new list (sprint/release)",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.List.ListCreate))
+	}, r.List.ListCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_update",
 		Description: "Update an existing list",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.List.ListUpdate))
+	}, r.List.ListUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_close",
 		Description: "Close a list (sprint/release)",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.List.ListClose))
+	}, r.List.ListClose)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_delete",
 		Description: "Delete a list",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.List.ListDelete))
+	}, r.List.ListDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_list_count",
 		Description: "Count lists",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.ListCount))
+	}, r.List.ListCount)
 
 	// Sprint aliases
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_sprint_list",
 		Description: "List sprints (alias for eva_list_list with type=sprint)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.SprintList))
+	}, r.List.SprintList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_sprint_get",
 		Description: "Get a single sprint by code (e.g., 'SPR-001543')",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.SprintGet))
+	}, r.List.SprintGet)
 
 	// Release aliases
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_release_list",
 		Description: "List releases (alias for eva_list_list with type=release)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.ReleaseList))
+	}, r.List.ReleaseList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_release_get",
 		Description: "Get a single release by code (e.g., 'REL-001641')",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.List.ReleaseGet))
+	}, r.List.ReleaseGet)
 
 	// Document tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_list",
 		Description: "List documents",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Document.DocumentList))
+	}, r.Document.DocumentList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_get",
 		Description: "Get a single document by code or ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Document.DocumentGet))
+	}, r.Document.DocumentGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_create",
 		Description: "Create a new document",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Document.DocumentCreate))
+	}, r.Document.DocumentCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_update",
 		Description: "Update an existing document",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.Document.DocumentUpdate))
+	}, r.Document.DocumentUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_delete",
 		Description: "Delete a document",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.Document.DocumentDelete))
+	}, r.Document.DocumentDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_count",
 		Description: "Count documents",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Document.DocumentCount))
+	}, r.Document.DocumentCount)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_document_page_tree",
 		Description: "Get document page tree hierarchy by root node ID. Returns flat list with parent_id and tree_node_is_branch for building tree structure",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Document.DocumentPageTree))
+	}, r.Document.DocumentPageTree)
 
 	// Person tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_person_list",
 		Description: "List persons (users)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Person.PersonList))
+	}, r.Person.PersonList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_person_get",
 		Description: "Get a single person by ID, login, or email",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Person.PersonGet))
+	}, r.Person.PersonGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_person_count",
 		Description: "Count persons",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Person.PersonCount))
+	}, r.Person.PersonCount)
 
 	// TimeLog tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_list",
 		Description: "List time log entries",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogList))
+	}, r.TimeLog.TimeLogList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_get",
 		Description: "Get a single time log entry by ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogGet))
+	}, r.TimeLog.TimeLogGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_create",
 		Description: "Create a new time log entry (time_spent in minutes)",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogCreate))
+	}, r.TimeLog.TimeLogCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_update",
 		Description: "Update an existing time log entry",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogUpdate))
+	}, r.TimeLog.TimeLogUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_delete",
 		Description: "Delete a time log entry",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogDelete))
+	}, r.TimeLog.TimeLogDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_timelog_count",
 		Description: "Count time log entries",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TimeLog.TimeLogCount))
+	}, r.TimeLog.TimeLogCount)
 
 	// Comment tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_list",
 		Description: "List comments",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Comment.CommentList))
+	}, r.Comment.CommentList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_get",
 		Description: "Get a single comment by ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Comment.CommentGet))
+	}, r.Comment.CommentGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_create",
 		Description: "Create a new comment on a task",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.Comment.CommentCreate))
+	}, r.Comment.CommentCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_update",
 		Description: "Update an existing comment",
 		Annotations: idempotentWriteAnnotations,
-	}, wrapHandler(r.Comment.CommentUpdate))
+	}, r.Comment.CommentUpdate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_delete",
 		Description: "Delete a comment",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.Comment.CommentDelete))
+	}, r.Comment.CommentDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_comment_count",
 		Description: "Count comments",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Comment.CommentCount))
+	}, r.Comment.CommentCount)
 
 	// Epic tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_epic_list",
 		Description: "List epics",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Epic.EpicList))
+	}, r.Epic.EpicList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_epic_get",
 		Description: "Get a single epic by code or ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Epic.EpicGet))
+	}, r.Epic.EpicGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_epic_count",
 		Description: "Count epics",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Epic.EpicCount))
+	}, r.Epic.EpicCount)
 
 	// TaskLink tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tasklink_list",
 		Description: "List task links (relationships between tasks)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TaskLink.TaskLinkList))
+	}, r.TaskLink.TaskLinkList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tasklink_get",
 		Description: "Get a single task link by ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TaskLink.TaskLinkGet))
+	}, r.TaskLink.TaskLinkGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tasklink_create",
 		Description: "Create a new task link",
 		Annotations: writeAnnotations,
-	}, wrapHandler(r.TaskLink.TaskLinkCreate))
+	}, r.TaskLink.TaskLinkCreate)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tasklink_delete",
 		Description: "Delete a task link",
 		Annotations: destructiveAnnotations,
-	}, wrapHandler(r.TaskLink.TaskLinkDelete))
+	}, r.TaskLink.TaskLinkDelete)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tasklink_count",
 		Description: "Count task links",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.TaskLink.TaskLinkCount))
+	}, r.TaskLink.TaskLinkCount)
 
 	// StatusHistory tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_statushistory_list",
 		Description: "List status history entries",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.StatusHistory.StatusHistoryList))
+	}, r.StatusHistory.StatusHistoryList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_statushistory_get",
 		Description: "Get a single status history entry by ID",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.StatusHistory.StatusHistoryGet))
+	}, r.StatusHistory.StatusHistoryGet)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_statushistory_count",
 		Description: "Count status history entries",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.StatusHistory.StatusHistoryCount))
+	}, r.StatusHistory.StatusHistoryCount)
 
 	// Stats tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_stats_project",
 		Description: "Get project statistics (total tasks, open tasks, active sprints, users)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Stats.ProjectStats))
+	}, r.Stats.ProjectStats)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_stats_sprint",
 		Description: "Get sprint statistics (total tasks, tasks by status)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Stats.SprintStats))
+	}, r.Stats.SprintStats)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_stats_timespent",
 		Description: "Get time spent report grouped by person and task",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Stats.TimeSpentStats))
+	}, r.Stats.TimeSpentStats)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_stats_sprint_executors_kpi",
 		Description: "Get KPI of closed sprint tasks by executor (requires project_code; if sprint_code is empty, aggregates across all project sprints; excludes tasks added during sprint)",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Stats.SprintExecutorsKPI))
+	}, r.Stats.SprintExecutorsKPI)
 
 	// LogicType tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_logic_type_list",
 		Description: "List logic types (task subtypes like epic/story/task/bug). Filter by cmf_model_name (e.g. 'CmfTask') or code (e.g. 'task.epic:default')",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.LogicType.LogicTypeList))
+	}, r.LogicType.LogicTypeList)
 
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_logic_type_get",
 		Description: "Get a single logic type by code (e.g. 'task.epic:default', 'task.userstory:story', 'task.agile:task', 'task.bug:default'). Returns LogicType with ID for use as logic_type_id when creating tasks",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.LogicType.LogicTypeGet))
+	}, r.LogicType.LogicTypeGet)
 
 	// Tag tools
-	mcp.AddTool(server, &mcp.Tool{
+	addTool(server, &mcp.Tool{
 		Name:        "eva_tag_list",
 		Description: "List tags available for tasks. Returns tag code (e.g. 'TAG-000004') and name/aliases. Use tag code in the tags field of eva_task_create. Filter by project_id or name.",
 		Annotations: readOnlyAnnotations,
-	}, wrapHandler(r.Tag.TagList))
+	}, r.Tag.TagList)
 }

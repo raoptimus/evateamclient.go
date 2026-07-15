@@ -10,6 +10,7 @@ package tools
 
 import (
 	"context"
+	"slices"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/raoptimus/evateamclient.go"
@@ -115,23 +116,31 @@ type TaskGetInput struct {
 	ID string `json:"id,omitempty"`
 
 	// Fields to return
-	Fields []string `json:"fields,omitempty"`
+	Fields StringList `json:"fields,omitempty"`
 }
 
 // TaskGet retrieves a single task by code or ID.
 func (t *TaskTools) TaskGet(ctx context.Context, input *TaskGetInput) (any, error) {
+	// Always project the id so a missing task can be told apart from a task
+	// whose requested fields happen to be empty (EVA returns an empty object,
+	// not an error, for a non-existent code/id — report E1).
+	fields := input.Fields
+	if len(fields) > 0 && !slices.Contains(fields, evateamclient.TaskFieldID) {
+		fields = append(fields, evateamclient.TaskFieldID)
+	}
+
 	var qb *evateamclient.QueryBuilder
 
 	switch {
 	case input.Code != "":
 		qb = evateamclient.NewQueryBuilder().
-			Select(input.Fields...).
+			Select(fields...).
 			From(evateamclient.EntityTask).
 			Where(sq.Eq{"code": input.Code}).
 			Limit(1)
 	case input.ID != "":
 		qb = evateamclient.NewQueryBuilder().
-			Select(input.Fields...).
+			Select(fields...).
 			From(evateamclient.EntityTask).
 			Where(sq.Eq{"id": input.ID}).
 			Limit(1)
@@ -143,24 +152,27 @@ func (t *TaskTools) TaskGet(ctx context.Context, input *TaskGetInput) (any, erro
 	if err != nil {
 		return nil, WrapError("task_get", err)
 	}
+	if task == nil || task.ID == "" {
+		return nil, WrapError("task_get", ErrNotFound)
+	}
 
 	return task, nil
 }
 
 // TaskCreateInput represents input for eva_task_create tool.
 type TaskCreateInput struct {
-	Name        string   `json:"name"`
-	ProjectID   string   `json:"project_id"`
-	Text        string   `json:"text,omitempty"`
-	Priority    int      `json:"priority,omitempty"`
-	Deadline    string   `json:"deadline,omitempty"`
-	Responsible string   `json:"responsible,omitempty"`
-	Executors   []string `json:"executors,omitempty"`
-	Tags        TagList  `json:"tags,omitempty"`
-	Lists       []string `json:"lists,omitempty"`
-	Epic        string   `json:"epic,omitempty"`
-	ParentTask  string   `json:"parent_task,omitempty"`
-	LogicTypeID string   `json:"logic_type_id,omitempty"`
+	Name        string     `json:"name"`
+	ProjectID   string     `json:"project_id"`
+	Text        string     `json:"text,omitempty"`
+	Priority    int        `json:"priority,omitempty"`
+	Deadline    string     `json:"deadline,omitempty"`
+	Responsible string     `json:"responsible,omitempty"`
+	Executors   StringList `json:"executors,omitempty"`
+	Tags        TagList    `json:"tags,omitempty"`
+	Lists       StringList `json:"lists,omitempty"`
+	Epic        string     `json:"epic,omitempty"`
+	ParentTask  string     `json:"parent_task,omitempty"`
+	LogicTypeID string     `json:"logic_type_id,omitempty"`
 }
 
 // TaskCreate creates a new task.

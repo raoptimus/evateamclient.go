@@ -214,6 +214,8 @@ func TestClient_TaskUpdate_Success_ReturnsUpdatedTask(t *testing.T) {
 	}`
 
 	mockHTTP.responses = []*req.Response{
+		// Pre-read of epic_id before the update (no epic → nothing to restore).
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"CmfTask:123","epic_id":""}}`),
 		mockResponse(http.StatusOK, updateResp),
 		mockResponse(http.StatusOK, getResp),
 	}
@@ -224,7 +226,7 @@ func TestClient_TaskUpdate_Success_ReturnsUpdatedTask(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Name", task.Name)
 	assert.Equal(t, "CmfTask:123", task.ID)
-	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + get calls")
+	assert.Equal(t, 3, mockHTTP.callIdx, "expected epic pre-read + update + get calls")
 }
 
 func TestClient_TaskDelete_Success_ReturnsNoError(t *testing.T) {

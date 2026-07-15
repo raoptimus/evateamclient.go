@@ -98,7 +98,7 @@ func BuildKwargs(input *QueryInput) map[string]any {
 
 	// Apply fields
 	if len(input.Fields) > 0 {
-		kwargs["fields"] = input.Fields
+		kwargs["fields"] = []string(input.Fields)
 	}
 
 	// Apply filters
@@ -116,7 +116,7 @@ func BuildKwargs(input *QueryInput) map[string]any {
 
 	// Apply ordering
 	if len(input.OrderBy) > 0 {
-		kwargs["order_by"] = input.OrderBy
+		kwargs["order_by"] = []string(input.OrderBy)
 	}
 
 	// Apply pagination (EVA uses slice: [start, end])
@@ -199,6 +199,14 @@ type StringList []string
 
 func (l *StringList) UnmarshalJSON(data []byte) error {
 	return unmarshalFlexibleSlice(data, (*[]string)(l))
+}
+
+// FilterList is a []Filter that tolerates a JSON-encoded string on input,
+// the same way StringList does, for MCP clients that stringify array arguments.
+type FilterList []Filter
+
+func (l *FilterList) UnmarshalJSON(data []byte) error {
+	return unmarshalFlexibleSlice(data, (*[]Filter)(l))
 }
 
 // toAnySlice converts typed slice to []any

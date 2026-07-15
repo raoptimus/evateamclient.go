@@ -109,6 +109,7 @@ var (
 		TaskFieldExecutors,
 		TaskFieldWaitingFor,
 		TaskFieldParentID,
+		TaskFieldParentTaskID,
 		TaskFieldFixVersions,
 		TaskFieldAgileStoryPoints,
 		TaskFieldComponents,
@@ -127,6 +128,7 @@ var (
 		TaskFieldDeadline,
 		TaskFieldResponsibleID,
 		TaskFieldEpicID,
+		TaskFieldParentTaskID,
 		TaskFieldAgileStoryPoints,
 		TaskFieldStatusID,
 	}
@@ -496,7 +498,15 @@ func (c *Client) TaskCreate(
 	return task, nil
 }
 
-// TaskUpdate updates an existing task
+// TaskUpdate updates an existing task.
+//
+// The EvaTeam server may reset the task's epic back to the root epic as a
+// side-effect of updating unrelated fields (e.g. text/name/status). Unless the
+// caller is explicitly changing the epic, TaskUpdate reads epic_id before the
+// update and restores it afterwards if it was changed. This costs one extra
+// read always, and one extra write only when a reset is detected. Tasks without
+// an epic are left untouched.
+//
 // Example:
 //
 //	updates := map[string]any{
@@ -511,6 +521,19 @@ func (c *Client) TaskUpdate(
 ) (*models.Task, error) {
 	if taskID == "" {
 		return nil, errors.New("taskID is required")
+	}
+
+	// Read the current epic before the update, which may reset it — unless the
+	// caller is changing the epic itself, in which case there is nothing to
+	// preserve.
+	preserveEpic := !updatesTouchEpic(updates)
+	var originalEpicID string
+	if preserveEpic {
+		before, _, err := c.EpicByID(ctx, taskID, []string{TaskFieldID, TaskFieldEpicID})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "read epic before update %s", taskID)
+		}
+		originalEpicID = before.EpicID
 	}
 
 	reqBody := &RPCRequest{
@@ -532,8 +555,10 @@ func (c *Client) TaskUpdate(
 		return nil, errors.New("CmfTask.update returned empty id")
 	}
 
+	// Re-fetch including epic_id so a server-side reset can be detected.
+	fields := append([]string{TaskFieldEpicID}, DefaultTaskFields...)
 	qb := NewQueryBuilder().
-		Select(DefaultTaskFields...).
+		Select(fields...).
 		From(EntityTask).
 		Where(sq.Eq{TaskFieldID: resp.Result}).
 		Limit(1)
@@ -541,16 +566,33 @@ func (c *Client) TaskUpdate(
 	if err != nil {
 		return nil, errors.WithMessagef(err, "fetch updated task %s", resp.Result)
 	}
+
+	// Restore the epic only if it existed and the update changed/reset it.
+	if preserveEpic && originalEpicID != "" && task.EpicID != originalEpicID {
+		restored, err := c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldEpic: originalEpicID})
+		if err != nil {
+			return nil, errors.WithMessagef(err, "restore epic %s after update %s", originalEpicID, taskID)
+		}
+		return restored, nil
+	}
+
 	return task, nil
+}
+
+// updatesTouchEpic reports whether an update map changes the epic link, in
+// which case TaskUpdate must not preserve/restore the previous epic.
+func updatesTouchEpic(updates map[string]any) bool {
+	if _, ok := updates[TaskFieldEpic]; ok {
+		return true
+	}
+	_, ok := updates[TaskFieldEpicID]
+	return ok
 }
 
 // TaskUpdateStatus updates task status (workflow transition).
 //
-// A status transition on the EvaTeam side may have a server-side side-effect of
-// resetting the task's epic back to the root epic. To preserve the link, the
-// epic is read before the transition and restored afterwards if it was changed.
-// This costs one extra read always, and one extra write only when a reset is
-// detected. Tasks without an epic are left untouched.
+// A status transition on the EvaTeam side may reset the task's epic back to the
+// root epic; TaskUpdate preserves it, so this simply delegates the transition.
 //
 // Example:
 //
@@ -564,28 +606,7 @@ func (c *Client) TaskUpdateStatus(
 		return nil, errors.New("taskID is required")
 	}
 
-	// Read the current epic before the workflow transition, which may reset it.
-	before, _, err := c.EpicByID(ctx, taskID, []string{TaskFieldID, TaskFieldEpicID})
-	if err != nil {
-		return nil, errors.WithMessagef(err, "read epic before status update %s", taskID)
-	}
-	originalEpicID := before.EpicID
-
-	updated, err := c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldCacheStatusType: status})
-	if err != nil {
-		return nil, err
-	}
-
-	// Restore the epic only if it existed and the transition changed/reset it.
-	if originalEpicID != "" && updated.EpicID != originalEpicID {
-		restored, err := c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldEpic: originalEpicID})
-		if err != nil {
-			return nil, errors.WithMessagef(err, "restore epic %s after status update %s", originalEpicID, taskID)
-		}
-		return restored, nil
-	}
-
-	return updated, nil
+	return c.TaskUpdate(ctx, taskID, map[string]any{TaskFieldCacheStatusType: status})
 }
 
 // TaskDelete deletes a task by ID

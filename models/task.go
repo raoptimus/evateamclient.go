@@ -48,7 +48,7 @@ type Task struct {
 	LogicType   *LogicType `json:"logic_type,omitempty"`
 	Epic        *Task      `json:"epic,omitempty"` // null or nested task
 	WaitingFor  *Person    `json:"waiting_for,omitempty"`
-	ParentTask  string     `json:"parent_task,omitempty"`
+	ParentTask  *Task      `json:"parent_task,omitempty"` // null or nested parent task (e.g. the story)
 
 	// Arrays
 	Components  []*Component `json:"components,omitempty"`

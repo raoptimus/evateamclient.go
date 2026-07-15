@@ -21,13 +21,13 @@ type Filter struct {
 // QueryInput represents common query parameters for list operations.
 type QueryInput struct {
 	// Fields to return (projection)
-	Fields []string `json:"fields,omitempty"`
+	Fields StringList `json:"fields,omitempty"`
 
 	// Filters for query
-	Filters []Filter `json:"filters,omitempty"`
+	Filters FilterList `json:"filters,omitempty"`
 
 	// Sorting: use "-field" for DESC, "field" for ASC
-	OrderBy []string `json:"order_by,omitempty"`
+	OrderBy StringList `json:"order_by,omitempty"`
 
 	// Pagination
 	Offset int `json:"offset,omitempty"`
