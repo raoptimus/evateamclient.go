@@ -194,10 +194,11 @@ func TestIntegration_Bug_D2_StatusIDReadOnly(t *testing.T) {
 	assert.Error(t, err, "KNOWN SERVER BUG D2: status_id is readonly and update returns empty id")
 }
 
-// TestIntegration_Bug_E1_GetMissingCodeReturnsEmpty reproduces report E1: a
-// task_get for a non-existent code returns an empty object instead of an error.
-// After the client-side fix, TaskQuery/handler must surface an empty result the
-// caller can detect (code stays empty).
+// TestIntegration_Bug_E1_GetMissingCodeReturnsEmpty reproduces report E1 at the
+// client-library level: c.Task for a non-existent code returns an empty object
+// instead of an error (the caller must check .code != ""). The MCP handler fix
+// lives one layer up — see TestIntegration_TaskGet_MissingCodeReturnsError in
+// the tools package, where eva_task_get now surfaces ErrNotFound.
 func TestIntegration_Bug_E1_GetMissingCodeReturnsEmpty(t *testing.T) {
 	c := newIntegrationClient(t)
 	_ = getIntegrationProjectID(t, c)
