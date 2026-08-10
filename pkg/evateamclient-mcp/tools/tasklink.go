@@ -101,18 +101,24 @@ func (t *TaskLinkTools) TaskLinkGet(ctx context.Context, input TaskLinkGetInput)
 
 // TaskLinkCreateInput represents input for eva_tasklink_create tool.
 type TaskLinkCreateInput struct {
-	SourceTaskID     string `json:"source_task_id"`
-	TargetTaskID     string `json:"target_task_id"`
-	RelationOptionID string `json:"relation_option_id"`
+	SourceTaskID string `json:"source_task_id"`
+	TargetTaskID string `json:"target_task_id"`
+	RelationType string `json:"relation_type,omitempty"`
 }
 
-// TaskLinkCreate creates a new task link.
+// TaskLinkCreate creates a new task link. An empty RelationType defaults to
+// evateamclient.RelationTypeLink ("Относится к").
 func (t *TaskLinkTools) TaskLinkCreate(ctx context.Context, input TaskLinkCreateInput) (any, error) {
-	if input.SourceTaskID == "" || input.TargetTaskID == "" || input.RelationOptionID == "" {
+	if input.SourceTaskID == "" || input.TargetTaskID == "" {
 		return nil, WrapError("tasklink_create", ErrInvalidInput)
 	}
 
-	link, err := t.client.TaskLinkCreate(ctx, input.SourceTaskID, input.TargetTaskID, input.RelationOptionID)
+	relationType := input.RelationType
+	if relationType == "" {
+		relationType = evateamclient.RelationTypeLink
+	}
+
+	link, err := t.client.TaskLinkCreate(ctx, input.SourceTaskID, input.TargetTaskID, relationType)
 	if err != nil {
 		return nil, WrapError("tasklink_create", err)
 	}

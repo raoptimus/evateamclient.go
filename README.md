@@ -225,7 +225,15 @@ TaskLinks(ctx, taskCode, fields)         // Get all links (incoming + outgoing)
 TaskLinksOutgoing(ctx, taskCode, fields) // Get outgoing links only
 TaskLinksIncoming(ctx, taskCode, fields) // Get incoming links only
 TaskLinksList(ctx, kwargs)               // List with custom filters
+TaskLinkCreate(ctx, outLink, inLink, relationType) // Create a link; relationType e.g. evateamclient.RelationTypeLink ("system.link" / "Относится к")
+TaskLinkDelete(ctx, linkID)              // Delete a link
 ```
+
+`outLink`/`inLink` accept a task code (e.g. `"TSK-000001"`) or ID. `relationType` is the
+link *type* code (`relation_type` kwarg), not a relation-option ID — `RelationTypeLink` is the
+only documented code (KB-000323). A created/fetched `TaskLink` exposes `RelationType` and the
+two sides as `*TaskRef` (`InLink`/`OutLink`), which unmarshal from either a bare ID string or a
+nested object depending on the requested `fields` (KB-000325).
 
 ### Persons
 ```go

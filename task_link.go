@@ -9,21 +9,30 @@
 package evateamclient
 
 import (
+	"bytes"
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
+
+// RelationTypeLink is the well-known "Относится к" (Relates to) task-link
+// relation_type code, per KB-000323 (doc/primery_api_zaprosov_doc-000244.pdf).
+// No other codes are documented; do not invent additional ones.
+const RelationTypeLink = "system.link"
 
 // TaskLink field constants for type-safe queries
 const (
 	// Core fields
-	TaskLinkFieldID        = "id"
-	TaskLinkFieldClassName = "class_name"
-	TaskLinkFieldCode      = "code"
-	TaskLinkFieldName      = "name"
-	TaskLinkFieldInLink    = "in_link"  // filter field: incoming links to task
-	TaskLinkFieldOutLink   = "out_link" // filter field: outgoing links from task
+	TaskLinkFieldID           = "id"
+	TaskLinkFieldClassName    = "class_name"
+	TaskLinkFieldCode         = "code"
+	TaskLinkFieldName         = "name"
+	TaskLinkFieldInLink       = "in_link"       // filter field: incoming links to task
+	TaskLinkFieldOutLink      = "out_link"      // filter field: outgoing links from task
+	TaskLinkFieldRelationType = "relation_type" // link type code, e.g. RelationTypeLink
 
 	// System
 	TaskLinkFieldCmfCreatedAt  = "cmf_created_at"
@@ -38,6 +47,9 @@ var (
 		TaskLinkFieldClassName,
 		TaskLinkFieldCode,
 		TaskLinkFieldName,
+		TaskLinkFieldInLink,
+		TaskLinkFieldOutLink,
+		TaskLinkFieldRelationType,
 		TaskLinkFieldCmfCreatedAt,
 		TaskLinkFieldCmfOwnerID,
 	}
@@ -47,6 +59,9 @@ var (
 		TaskLinkFieldID,
 		TaskLinkFieldCode,
 		TaskLinkFieldName,
+		TaskLinkFieldInLink,
+		TaskLinkFieldOutLink,
+		TaskLinkFieldRelationType,
 	}
 )
 
@@ -256,18 +271,33 @@ func (c *Client) TaskLinksIncoming(
 	return c.TaskLinksListQuery(ctx, qb)
 }
 
-// TaskLinkCreate creates a new task link
+// TaskLinkCreate creates a link between two tasks.
+//
+// outLink is the source task, inLink is the target task; both accept a task
+// code (e.g. "TSK-000001") or ID (e.g. "CmfTask:uuid"). relationType is the
+// link type code (e.g. RelationTypeLink), not a relation-option ID/code.
+//
 // Example:
 //
-//	link, err := client.TaskLinkCreate(ctx, "CmfTask:uuid1", "CmfTask:uuid2", "RLO-000001")
+//	link, err := client.TaskLinkCreate(ctx, "TSK-000001", "TSK-000002", evateamclient.RelationTypeLink)
 func (c *Client) TaskLinkCreate(
 	ctx context.Context,
-	sourceTaskID, targetTaskID, relationOptionID string,
+	outLink, inLink, relationType string,
 ) (*models.TaskLink, error) {
+	if outLink == "" {
+		return nil, errors.New("outLink is required")
+	}
+	if inLink == "" {
+		return nil, errors.New("inLink is required")
+	}
+	if relationType == "" {
+		return nil, errors.New("relationType is required")
+	}
+
 	kwargs := map[string]any{
-		TaskLinkFieldOutLink: sourceTaskID,
-		TaskLinkFieldInLink:  targetTaskID,
-		"id":                 relationOptionID,
+		TaskLinkFieldOutLink:      outLink,
+		TaskLinkFieldInLink:       inLink,
+		TaskLinkFieldRelationType: relationType,
 	}
 
 	reqBody := &RPCRequest{
@@ -277,12 +307,49 @@ func (c *Client) TaskLinkCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.TaskLinkResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return c.parseTaskLinkCreateResult(ctx, resp.Result)
+}
+
+// parseTaskLinkCreateResult parses the `result` of CmfRelationOption.create.
+// The documentation does not fix its shape, so both known forms are
+// supported: a bare ID/code string (needs a follow-up .get, like
+// TaskCreate) or a full object.
+func (c *Client) parseTaskLinkCreateResult(ctx context.Context, raw encjson.RawMessage) (*models.TaskLink, error) {
+	const errEmptyResult = "CmfRelationOption.create returned empty result"
+
+	trimmed := bytes.TrimSpace(raw)
+	switch {
+	case len(trimmed) == 0, string(trimmed) == "null", string(trimmed) == "false", string(trimmed) == `""`:
+		return nil, errors.New(errEmptyResult)
+	case trimmed[0] == '"':
+		var id string
+		if err := encjson.Unmarshal(trimmed, &id); err != nil {
+			return nil, errors.WithMessage(err, "parse CmfRelationOption.create result")
+		}
+
+		link, _, err := c.TaskLink(ctx, id, DefaultTaskLinkFields)
+		if err != nil {
+			return nil, errors.WithMessagef(err, "fetch created task link %s", id)
+		}
+		return link, nil
+	default:
+		var link models.TaskLink
+		if err := encjson.Unmarshal(trimmed, &link); err != nil {
+			return nil, errors.WithMessage(err, "parse CmfRelationOption.create result")
+		}
+		if link.ID == "" {
+			return nil, errors.New(errEmptyResult)
+		}
+		return &link, nil
+	}
 }
 
 // TaskLinkDelete deletes a task link by ID
@@ -293,15 +360,15 @@ func (c *Client) TaskLinkDelete(
 	ctx context.Context,
 	linkID string,
 ) error {
-	kwargs := map[string]any{
-		"id": linkID,
+	if linkID == "" {
+		return errors.New("linkID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfRelationOption.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{linkID},
 	}
 
 	var resp struct {

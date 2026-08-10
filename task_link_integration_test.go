@@ -10,10 +10,13 @@ package evateamclient
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/raoptimus/evateamclient.go/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -130,6 +133,105 @@ func TestIntegration_TaskLinksOutgoing(t *testing.T) {
 	for _, link := range links {
 		assert.True(t, strings.HasPrefix(link.ID, "CmfRelationOption:"))
 	}
+}
+
+// TestIntegration_TaskLinkCreate_VisibleViaBothReadPaths is the red-green loop
+// for the original bug: creating a link must actually create it, and the new
+// link must be readable back both via CmfRelationOption.list (TaskLinksOutgoing/
+// TaskLinksIncoming) and via the documented KB-000325 path (CmfTask.get with
+// fields ["out_tasks.**","in_tasks.**"]). Deletes the link and both tasks.
+func TestIntegration_TaskLinkCreate_VisibleViaBothReadPaths(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	lt, err := c.LogicTypeByCode(ctx, LogicTypeCodeTask)
+	require.NoError(t, err)
+
+	suffix := time.Now().UnixNano()
+
+	taskOut, err := c.TaskCreate(ctx, &TaskCreateParams{
+		Name:        fmt.Sprintf("[TEST] tasklink out %d", suffix),
+		ProjectID:   projectID,
+		LogicTypeID: lt.ID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, taskOut.ID)
+	t.Cleanup(func() { _ = c.TaskDelete(context.Background(), taskOut.ID) })
+
+	taskIn, err := c.TaskCreate(ctx, &TaskCreateParams{
+		Name:        fmt.Sprintf("[TEST] tasklink in %d", suffix),
+		ProjectID:   projectID,
+		LogicTypeID: lt.ID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, taskIn.ID)
+	t.Cleanup(func() { _ = c.TaskDelete(context.Background(), taskIn.ID) })
+
+	link, err := c.TaskLinkCreate(ctx, taskOut.ID, taskIn.ID, RelationTypeLink)
+	require.NoError(t, err)
+	require.NotNil(t, link)
+	require.NotEmpty(t, link.ID, "TaskLinkCreate must return a created link, not a silent no-op")
+
+	linkDeleted := false
+	t.Cleanup(func() {
+		if !linkDeleted {
+			_ = c.TaskLinkDelete(context.Background(), link.ID)
+		}
+	})
+
+	t.Run("read_via_relation_list", func(t *testing.T) {
+		outgoing, _, err := c.TaskLinksOutgoing(ctx, taskOut.ID, DefaultTaskLinkListFields)
+		require.NoError(t, err)
+		assert.True(t, containsTaskLinkID(outgoing, link.ID),
+			"created link should appear in TaskLinksOutgoing(%s)", taskOut.ID)
+
+		incoming, _, err := c.TaskLinksIncoming(ctx, taskIn.ID, DefaultTaskLinkListFields)
+		require.NoError(t, err)
+		assert.True(t, containsTaskLinkID(incoming, link.ID),
+			"created link should appear in TaskLinksIncoming(%s)", taskIn.ID)
+	})
+
+	t.Run("read_via_task_out_in_tasks_KB-000325", func(t *testing.T) {
+		qb := NewQueryBuilder().
+			From(EntityTask).
+			Where(sq.Eq{TaskFieldID: taskOut.ID}).
+			Limit(1)
+		kwargs, err := qb.ToKwargs()
+		require.NoError(t, err)
+		kwargs["fields"] = []string{"out_tasks.**", "in_tasks.**"}
+
+		reqBody := &RPCRequest{
+			JSONRPC: "2.2",
+			Method:  "CmfTask.get",
+			CallID:  newCallID(),
+			Kwargs:  kwargs,
+		}
+
+		var resp struct {
+			Result struct {
+				OutTasks []models.TaskLink `json:"out_tasks"`
+			} `json:"result"`
+		}
+		require.NoError(t, c.doRequest(ctx, reqBody, &resp))
+		assert.True(t, containsTaskLinkID(resp.Result.OutTasks, link.ID),
+			"KB-000325: created link should appear in CmfTask.get(%s).out_tasks", taskOut.ID)
+	})
+
+	require.NoError(t, c.TaskLinkDelete(ctx, link.ID))
+	linkDeleted = true
+
+	_, _, err = c.TaskLink(ctx, link.ID, nil)
+	assert.Error(t, err, "deleted link should no longer be readable")
+}
+
+func containsTaskLinkID(links []models.TaskLink, id string) bool {
+	for _, l := range links {
+		if l.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestIntegration_TaskLinks_Deprecated(t *testing.T) {

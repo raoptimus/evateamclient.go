@@ -511,8 +511,10 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 
 	// TaskLink tools
 	addTool(server, &mcp.Tool{
-		Name:        "eva_tasklink_list",
-		Description: "List task links (relationships between tasks)",
+		Name: "eva_tasklink_list",
+		Description: "List task links (relationships between tasks). " +
+			"Items include in_link/out_link (each a task ID, or an object with id/code/name " +
+			"when fields includes '**') and relation_type — the link type code.",
 		Annotations: readOnlyAnnotations,
 	}, r.TaskLink.TaskLinkList)
 
@@ -523,8 +525,10 @@ func (r *Registry) RegisterAll(server *mcp.Server) {
 	}, r.TaskLink.TaskLinkGet)
 
 	addTool(server, &mcp.Tool{
-		Name:        "eva_tasklink_create",
-		Description: "Create a new task link",
+		Name: "eva_tasklink_create",
+		Description: "Create a link between two tasks. " +
+			"source_task_id/target_task_id accept a task code (e.g. 'TSK-000001') or ID. " +
+			"relation_type is the code of the link type, defaulting to 'system.link' ('Относится к').",
 		Annotations: writeAnnotations,
 	}, r.TaskLink.TaskLinkCreate)
 

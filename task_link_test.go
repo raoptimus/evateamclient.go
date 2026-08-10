@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -229,7 +231,11 @@ func TestClient_TaskLinksList_Success_ReturnsLinks(t *testing.T) {
 	assert.NotNil(t, meta)
 }
 
-func TestClient_TaskLinkCreate_Success_ReturnsTaskLink(t *testing.T) {
+// TestClient_TaskLinkCreate_Success_SendsExactKwargs is the regression test for
+// the original bug: CmfRelationOption.create only accepts out_link/in_link/
+// relation_type kwargs (additionalProperties: false in the OpenAPI spec). A
+// stray "id" key (the old, wrong kwarg) makes this test fail.
+func TestClient_TaskLinkCreate_Success_SendsExactKwargs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -245,8 +251,21 @@ func TestClient_TaskLinkCreate_Success_ReturnsTaskLink(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfRelationOption.create")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, map[string]any{
+			"out_link":      "CmfTask:source",
+			"in_link":       "CmfTask:target",
+			"relation_type": RelationTypeLink,
+		}, parsed.Kwargs)
+	}
 
-	link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", "RLO-100")
+	link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", RelationTypeLink)
 
 	require.NoError(t, err)
 	assert.Equal(t, "CmfRelationOption:new-123", link.ID)
@@ -254,7 +273,81 @@ func TestClient_TaskLinkCreate_Success_ReturnsTaskLink(t *testing.T) {
 	assert.Equal(t, "blocks", *link.Name)
 }
 
-func TestClient_TaskLinkDelete_Success_ReturnsNoError(t *testing.T) {
+func TestClient_TaskLinkCreate_ResultIsIDString_FetchesCreatedLink(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfRelationOption:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {
+				"id": "CmfRelationOption:new-123",
+				"code": "RLO-100",
+				"name": "blocks",
+				"relation_type": "system.link"
+			}
+		}`),
+	}
+
+	link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", RelationTypeLink)
+
+	require.NoError(t, err)
+	require.NotNil(t, link)
+	assert.Equal(t, "CmfRelationOption:new-123", link.ID)
+	assert.Equal(t, "system.link", link.RelationType)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+func TestClient_TaskLinkCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", RelationTypeLink)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfRelationOption.create returned empty result")
+			assert.Nil(t, link)
+		})
+	}
+}
+
+func TestClient_TaskLinkCreate_EmptyArgument_ReturnsErrorWithoutRequest(t *testing.T) {
+	tests := []struct {
+		name                          string
+		outLink, inLink, relationType string
+	}{
+		{"empty outLink", "", "CmfTask:target", RelationTypeLink},
+		{"empty inLink", "CmfTask:source", "", RelationTypeLink},
+		{"empty relationType", "CmfTask:source", "CmfTask:target", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.err = errors.New("must not be called")
+
+			link, err := client.TaskLinkCreate(testCtx, tt.outLink, tt.inLink, tt.relationType)
+
+			require.Error(t, err)
+			assert.Nil(t, link)
+		})
+	}
+}
+
+// TestClient_TaskLinkDelete_Success_SendsIDInArgs is the regression test for
+// the EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_TaskLinkDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -266,8 +359,83 @@ func TestClient_TaskLinkDelete_Success_ReturnsNoError(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfRelationOption.delete")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfRelationOption:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
+	}
 
 	err := client.TaskLinkDelete(testCtx, "CmfRelationOption:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_TaskLinkDelete_EmptyLinkID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.TaskLinkDelete(testCtx, "")
+
+	assert.Error(t, err)
+}
+
+func TestClient_TaskLink_InLinkOutLink_StringForm_ParsesAsID(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	respBody := `{
+		"jsonrpc": "2.2",
+		"result": {
+			"id": "CmfRelationOption:123",
+			"code": "RLO-001",
+			"relation_type": "system.link",
+			"in_link": "CmfTask:target",
+			"out_link": "CmfTask:source"
+		}
+	}`
+
+	mockHTTP.response = mockResponse(http.StatusOK, respBody)
+
+	link, _, err := client.TaskLink(testCtx, "CmfRelationOption:123", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "system.link", link.RelationType)
+	require.NotNil(t, link.InLink)
+	assert.Equal(t, "CmfTask:target", link.InLink.ID)
+	require.NotNil(t, link.OutLink)
+	assert.Equal(t, "CmfTask:source", link.OutLink.ID)
+}
+
+func TestClient_TaskLink_InLinkOutLink_ObjectForm_ParsesFields(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	respBody := `{
+		"jsonrpc": "2.2",
+		"result": {
+			"id": "CmfRelationOption:123",
+			"code": "RLO-001",
+			"relation_type": "system.link",
+			"in_link": {"id": "CmfTask:target", "code": "TSK-000002", "name": "Target task"},
+			"out_link": {"id": "CmfTask:source", "code": "TSK-000001", "name": "Source task"}
+		}
+	}`
+
+	mockHTTP.response = mockResponse(http.StatusOK, respBody)
+
+	link, _, err := client.TaskLink(testCtx, "CmfRelationOption:123", AllBasicAndRelationFields)
+
+	require.NoError(t, err)
+	require.NotNil(t, link.InLink)
+	assert.Equal(t, "CmfTask:target", link.InLink.ID)
+	assert.Equal(t, "TSK-000002", link.InLink.Code)
+	assert.Equal(t, "Target task", link.InLink.Name)
+	require.NotNil(t, link.OutLink)
+	assert.Equal(t, "CmfTask:source", link.OutLink.ID)
+	assert.Equal(t, "TSK-000001", link.OutLink.Code)
+	assert.Equal(t, "Source task", link.OutLink.Name)
 }
