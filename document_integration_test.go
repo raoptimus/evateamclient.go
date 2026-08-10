@@ -368,8 +368,12 @@ func TestIntegration_DocumentCreate_UpdateDelete_FullCycle(t *testing.T) {
 	require.NoError(t, c.DocumentDelete(ctx, doc.ID))
 	deleted = true
 
-	_, _, err = c.DocumentQuery(ctx, qb)
-	assert.Error(t, err, "deleted document should no longer be readable")
+	// EVA's .get on a deleted/missing record returns 200 OK + an empty object,
+	// not an error (mcp_bugs_integration_test.go, TestIntegration_Bug_E1_...).
+	reFetched, _, err = c.DocumentQuery(ctx, qb)
+	if err == nil {
+		assert.Empty(t, reFetched.ID, "deleted document should no longer be readable")
+	}
 }
 
 func TestIntegration_Documents_Deprecated(t *testing.T) {

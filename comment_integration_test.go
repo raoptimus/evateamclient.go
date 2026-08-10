@@ -252,8 +252,12 @@ func TestIntegration_CommentCreate_UpdateDelete_FullCycle(t *testing.T) {
 	require.NoError(t, c.CommentDelete(ctx, comment.ID))
 	deleted = true
 
-	_, _, err = c.Comment(ctx, comment.ID, DefaultCommentFields)
-	assert.Error(t, err, "deleted comment should no longer be readable")
+	// EVA's .get on a deleted/missing record returns 200 OK + an empty object,
+	// not an error (mcp_bugs_integration_test.go, TestIntegration_Bug_E1_...).
+	fetched, _, err = c.Comment(ctx, comment.ID, DefaultCommentFields)
+	if err == nil {
+		assert.Empty(t, fetched.ID, "deleted comment should no longer be readable")
+	}
 }
 
 func TestIntegration_Comments_Deprecated(t *testing.T) {

@@ -11,6 +11,7 @@ package evateamclient
 import (
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -311,13 +312,20 @@ func (c *Client) ProjectCreate(
 	return parseWriteResult(ctx, resp.Result, "CmfProject.create", c.projectByID, projectHasEmptyID)
 }
 
-// projectByID fetches a project by ID, for the two-phase create/update
-// follow-up `.get` when CmfProject.create/update returns a bare ID string.
-func (c *Client) projectByID(ctx context.Context, id string) (*models.Project, error) {
+// projectByID fetches a project by ID or code, for the two-phase
+// create/update follow-up `.get` when CmfProject.create/update returns a bare
+// string. A ":" marks the class-name-prefixed ID form; otherwise it's a code
+// (mirrors fetchTaskLinkByIDOrCode in task_link.go).
+func (c *Client) projectByID(ctx context.Context, idOrCode string) (*models.Project, error) {
+	field := ProjectFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = ProjectFieldID
+	}
+
 	qb := NewQueryBuilder().
 		Select(DefaultProjectFields...).
 		From(EntityProject).
-		Where(sq.Eq{ProjectFieldID: id}).
+		Where(sq.Eq{field: idOrCode}).
 		Limit(1)
 
 	project, _, err := c.ProjectQuery(ctx, qb)

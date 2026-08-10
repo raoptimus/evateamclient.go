@@ -223,6 +223,36 @@ func TestClient_ListCreate_Success_ReturnsList(t *testing.T) {
 	assert.Equal(t, "New Sprint", list.Name)
 }
 
+// TestClient_ListCreate_Success_SendsExactKwargs is the regression test for
+// the OAS CmfList.create kwargs: {name, parent}, not the read/filter field
+// name parent_id (additionalProperties: false).
+func TestClient_ListCreate_Success_SendsExactKwargs(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	mockHTTP.response = mockResponse(http.StatusOK, `{
+		"jsonrpc": "2.2",
+		"result": {"id": "CmfList:new-123", "code": "SPR-100", "name": "New Sprint"}
+	}`)
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, map[string]any{
+			"name":   "New Sprint",
+			"parent": "CmfProject:123",
+		}, parsed.Kwargs)
+	}
+
+	params := ListCreateParams{Name: "New Sprint", ParentID: "CmfProject:123"}
+	list, err := client.ListCreate(testCtx, &params)
+
+	require.NoError(t, err)
+	assert.Equal(t, "CmfList:new-123", list.ID)
+}
+
 func TestClient_ListCreate_ResultIsIDString_FetchesCreatedList(t *testing.T) {
 	client, mockHTTP := newTestClientWithSequentialMock(t)
 
@@ -241,6 +271,61 @@ func TestClient_ListCreate_ResultIsIDString_FetchesCreatedList(t *testing.T) {
 	require.NotNil(t, list)
 	assert.Equal(t, "CmfList:new-123", list.ID)
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_ListCreate_FollowUpGet_FiltersByIDOrCode covers both forms a
+// bare create-result string can take: an ID ("CmfList:uuid", which carries a
+// ":" class-name prefix) or a code ("SPR-000123", which doesn't). Filtering
+// the follow-up .get by the wrong field would find nothing and surface as a
+// spurious error, prompting callers to retry and create dupes.
+func TestClient_ListCreate_FollowUpGet_FiltersByIDOrCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		resultValue string
+		wantField   string
+	}{
+		{"ID form filters by id", "CmfList:new-123", ListFieldID},
+		{"code form filters by code", "SPR-000123", ListFieldCode},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClientWithSequentialMock(t)
+
+			mockHTTP.responses = []*req.Response{
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"`+tt.resultValue+`"}`),
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"CmfList:new-123","code":"SPR-000123"}}`),
+			}
+
+			var followUpFilter []any
+			mockHTTP.bodyCheck = func(body []byte) bool {
+				var parsed struct {
+					Method string         `json:"method"`
+					Kwargs map[string]any `json:"kwargs"`
+				}
+				if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+					return false
+				}
+				if parsed.Method != "CmfList.get" {
+					return true
+				}
+				filter, ok := parsed.Kwargs["filter"].([]any)
+				if !assert.True(t, ok, "expected filter kwarg on follow-up .get") {
+					return false
+				}
+				followUpFilter = filter
+				return true
+			}
+
+			params := ListCreateParams{Name: "New Sprint", ParentID: "CmfProject:123"}
+			list, err := client.ListCreate(testCtx, &params)
+
+			require.NoError(t, err)
+			require.NotNil(t, list)
+			require.NotEmpty(t, followUpFilter, "follow-up .get should have been called with a filter")
+			assert.Equal(t, tt.wantField, followUpFilter[0])
+		})
+	}
 }
 
 // TestClient_ListCreate_EmptyResult_ReturnsError guards against a silent

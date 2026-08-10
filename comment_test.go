@@ -218,7 +218,7 @@ func TestClient_CommentCreate_Success_ReturnsComment(t *testing.T) {
 		"result": {
 			"id": "Comment:new-123",
 			"text": "New comment",
-			"task_id": "Task:PROJ-123"
+			"parent_id": "Task:PROJ-123"
 		}
 	}`
 
@@ -235,6 +235,35 @@ func TestClient_CommentCreate_Success_ReturnsComment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Comment:new-123", comment.ID)
 	assert.Equal(t, "New comment", comment.Text)
+}
+
+// TestClient_CommentCreate_Success_SendsExactKwargs is the regression test for
+// the KB-000205 kwarg name: CmfComment.create takes {parent, text}, not
+// task_id (OAS additionalProperties: false).
+func TestClient_CommentCreate_Success_SendsExactKwargs(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	mockHTTP.response = mockResponse(http.StatusOK, `{
+		"jsonrpc": "2.2",
+		"result": {"id": "Comment:new-123", "text": "New comment"}
+	}`)
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, map[string]any{
+			"parent": "Task:PROJ-123",
+			"text":   "New comment",
+		}, parsed.Kwargs)
+	}
+
+	comment, err := client.CommentCreate(testCtx, "Task:PROJ-123", "New comment")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Comment:new-123", comment.ID)
 }
 
 func TestClient_CommentCreate_ResultIsIDString_FetchesCreatedComment(t *testing.T) {
@@ -254,6 +283,63 @@ func TestClient_CommentCreate_ResultIsIDString_FetchesCreatedComment(t *testing.
 	require.NotNil(t, comment)
 	assert.Equal(t, "Comment:new-123", comment.ID)
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_CommentCreate_FollowUpGet_FiltersByIDOrCode covers both forms a
+// bare create-result string can take: an ID ("Comment:uuid", which carries a
+// ":" class-name prefix) or a code (which doesn't). Filtering the follow-up
+// .get by the wrong field would find nothing and surface as a spurious error,
+// prompting callers to retry and create dupes (mirrors task_link_test.go).
+func TestClient_CommentCreate_FollowUpGet_FiltersByIDOrCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		resultValue string
+		wantField   string
+	}{
+		{"ID form filters by id", "Comment:new-123", CommentFieldID},
+		{"code form filters by code", "CMT-000123", CommentFieldCode},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClientWithSequentialMock(t)
+
+			mockHTTP.responses = []*req.Response{
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"`+tt.resultValue+`"}`),
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"Comment:new-123","code":"CMT-000123"}}`),
+			}
+
+			var followUpMethod string
+			var followUpFilter []any
+			mockHTTP.bodyCheck = func(body []byte) bool {
+				var parsed struct {
+					Method string         `json:"method"`
+					Kwargs map[string]any `json:"kwargs"`
+				}
+				if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+					return false
+				}
+				if parsed.Method != "CmfComment.get" {
+					return true
+				}
+				followUpMethod = parsed.Method
+				filter, ok := parsed.Kwargs["filter"].([]any)
+				if !assert.True(t, ok, "expected filter kwarg on follow-up .get") {
+					return false
+				}
+				followUpFilter = filter
+				return true
+			}
+
+			comment, err := client.CommentCreate(testCtx, "Task:PROJ-123", "New comment")
+
+			require.NoError(t, err)
+			require.NotNil(t, comment)
+			assert.Equal(t, "CmfComment.get", followUpMethod)
+			require.NotEmpty(t, followUpFilter, "follow-up .get should have been called with a filter")
+			assert.Equal(t, tt.wantField, followUpFilter[0])
+		})
+	}
 }
 
 // TestClient_CommentCreate_EmptyResult_ReturnsError guards against a silent

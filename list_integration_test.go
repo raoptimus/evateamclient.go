@@ -268,8 +268,12 @@ func TestIntegration_ListCreate_UpdateDelete_FullCycle(t *testing.T) {
 	require.NoError(t, c.ListDelete(ctx, l.ID))
 	deleted = true
 
-	_, _, err = c.ListQuery(ctx, qb)
-	assert.Error(t, err, "deleted list should no longer be readable")
+	// EVA's .get on a deleted/missing record returns 200 OK + an empty object,
+	// not an error (mcp_bugs_integration_test.go, TestIntegration_Bug_E1_...).
+	reFetched, _, err = c.ListQuery(ctx, qb)
+	if err == nil {
+		assert.Empty(t, reFetched.ID, "deleted list should no longer be readable")
+	}
 }
 
 func TestIntegration_Lists_Deprecated(t *testing.T) {

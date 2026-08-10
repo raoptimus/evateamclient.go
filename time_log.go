@@ -11,6 +11,7 @@ package evateamclient
 import (
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -344,11 +345,23 @@ func (c *Client) TimeLogCreate(
 	return parseWriteResult(ctx, resp.Result, "CmfTimeTrackerHistory.create", c.timeLogByID, timeLogHasEmptyID)
 }
 
-// timeLogByID fetches a time log entry by ID, for the two-phase
+// timeLogByID fetches a time log entry by ID or code, for the two-phase
 // create/update follow-up `.get` when CmfTimeTrackerHistory.create/update
-// returns a bare ID string.
-func (c *Client) timeLogByID(ctx context.Context, id string) (*models.TimeLog, error) {
-	log, _, err := c.TimeLog(ctx, id, DefaultTimeLogFields)
+// returns a bare string. A ":" marks the class-name-prefixed ID form;
+// otherwise it's a code (mirrors fetchTaskLinkByIDOrCode in task_link.go).
+func (c *Client) timeLogByID(ctx context.Context, idOrCode string) (*models.TimeLog, error) {
+	field := TimeLogFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = TimeLogFieldID
+	}
+
+	qb := NewQueryBuilder().
+		Select(DefaultTimeLogFields...).
+		From(EntityTimeLog).
+		Where(sq.Eq{field: idOrCode}).
+		Limit(1)
+
+	log, _, err := c.TimeLogQuery(ctx, qb)
 	return log, err
 }
 

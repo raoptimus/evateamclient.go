@@ -35,12 +35,10 @@ func parseWriteResult[T any](
 	fetch func(ctx context.Context, id string) (*T, error),
 	emptyID func(*T) bool,
 ) (*T, error) {
-	errEmptyResult := errors.Errorf("%s returned empty result", method)
-
 	trimmed := bytes.TrimSpace(raw)
 	switch {
 	case len(trimmed) == 0, string(trimmed) == "null", string(trimmed) == "false", string(trimmed) == `""`:
-		return nil, errEmptyResult
+		return nil, emptyResultErr(method)
 	case trimmed[0] == '"':
 		var id string
 		if err := encjson.Unmarshal(trimmed, &id); err != nil {
@@ -52,7 +50,7 @@ func parseWriteResult[T any](
 			return nil, errors.WithMessagef(err, "fetch %s result %s", method, id)
 		}
 		if result == nil || emptyID(result) {
-			return nil, errEmptyResult
+			return nil, emptyResultErr(method)
 		}
 		return result, nil
 	case trimmed[0] == '{':
@@ -61,10 +59,18 @@ func parseWriteResult[T any](
 			return nil, errors.WithMessagef(err, "parse %s result", method)
 		}
 		if emptyID(&result) {
-			return nil, errEmptyResult
+			return nil, emptyResultErr(method)
 		}
 		return &result, nil
 	default:
 		return nil, errors.Errorf("%s returned unexpected result shape", method)
 	}
+}
+
+// emptyResultErr builds the "empty result" error. Kept as a function (not a
+// value computed once per parseWriteResult call) so pkg/errors only snapshots
+// a stack on the failure paths that actually use it, not on every successful
+// create/update.
+func emptyResultErr(method string) error {
+	return errors.Errorf("%s returned empty result", method)
 }

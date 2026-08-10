@@ -185,6 +185,20 @@ tasks, _, err := client.Tasks(ctx, kwargs)
 
 ## API Reference
 
+### Write operations (create/update/delete)
+
+EVA's JSON-RPC methods follow one convention across resources (Projects, Tasks, Lists,
+Documents, Comments, Time Logs, Task Links):
+
+- **`create`** takes only `kwargs`, keyed by the *parent* relation (e.g. `parent`,
+  `project_id`), never `id` — each create method sends exactly the kwargs its OAS/KB spec
+  documents, nothing invented.
+- **`update`/`delete`** take the target `id` in `args` (`Args: []any{id}`), not `kwargs`.
+- **`create`/`update` response** is either a bare ID/code string (needs a follow-up
+  `.get`, resolved automatically by the client) or the full object inline. An empty
+  result (`null`/`""`/`false`/a zero-value object) is treated as an error, not a
+  zero-value success — EVA can otherwise report success while silently writing nothing.
+
 ### Projects
 ```go
 Project(ctx, code, fields)          // Get single project

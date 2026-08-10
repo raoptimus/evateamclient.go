@@ -289,6 +289,117 @@ func TestClient_DocumentCreate_Success_ReturnsDocument(t *testing.T) {
 	assert.Equal(t, "New Document", doc.Name)
 }
 
+// TestClient_DocumentCreate_Success_SendsExactKwargs is the regression test
+// for the OAS CmfDocument.create kwargs: {name, parent, tree_parent}, not the
+// read/filter field names project_id/parent_id (additionalProperties: false).
+func TestClient_DocumentCreate_Success_SendsExactKwargs(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	mockHTTP.response = mockResponse(http.StatusOK, `{
+		"jsonrpc": "2.2",
+		"result": {"id": "CmfDocument:new-123", "code": "DOC-100", "name": "New Document"}
+	}`)
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, map[string]any{
+			"name":        "New Document",
+			"parent":      "CmfProject:123",
+			"tree_parent": "CmfDocument:root",
+		}, parsed.Kwargs)
+	}
+
+	params := DocumentCreateParams{
+		Name:      "New Document",
+		ProjectID: "CmfProject:123",
+		ParentID:  "CmfDocument:root",
+	}
+	doc, err := client.DocumentCreate(testCtx, params)
+
+	require.NoError(t, err)
+	assert.Equal(t, "CmfDocument:new-123", doc.ID)
+}
+
+// TestClient_DocumentCreate_WithText_SendsTextDraftAndPublishes covers the
+// draft/publish behavior: Text goes into the text_draft kwarg (OAS: no plain
+// `text` kwarg on create), and a non-empty Text triggers an automatic
+// CmfDocument.do_publish so the created document isn't left invisible.
+func TestClient_DocumentCreate_WithText_SendsTextDraftAndPublishes(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:new-123", "code": "DOC-100", "name": "New Document"}
+		}`),
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":true}`),
+	}
+
+	var createKwargs map[string]any
+	var publishMethod string
+	var publishArgs []any
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Method string         `json:"method"`
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		switch parsed.Method {
+		case "CmfDocument.create":
+			createKwargs = parsed.Kwargs
+		case "CmfDocument.do_publish":
+			publishMethod = parsed.Method
+			publishArgs = parsed.Args
+		}
+		return true
+	}
+
+	params := DocumentCreateParams{Name: "New Document", ProjectID: "CmfProject:123", Text: "Document content"}
+	doc, err := client.DocumentCreate(testCtx, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	assert.Equal(t, map[string]any{
+		"name":       "New Document",
+		"parent":     "CmfProject:123",
+		"text_draft": "Document content",
+	}, createKwargs)
+	assert.Equal(t, "CmfDocument.do_publish", publishMethod)
+	assert.Equal(t, []any{"CmfDocument:new-123"}, publishArgs)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + do_publish")
+}
+
+// TestClient_DocumentCreate_WithText_PublishFails_ReturnsWrappedError checks
+// that a publish failure isn't silently swallowed (the create would otherwise
+// look successful while the text stays an invisible draft), and that the
+// created document's ID is preserved in the error so it isn't lost.
+func TestClient_DocumentCreate_WithText_PublishFails_ReturnsWrappedError(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:new-123", "code": "DOC-100", "name": "New Document"}
+		}`),
+	}
+	mockHTTP.errors = []error{nil, errors.New("publish failed")}
+
+	params := DocumentCreateParams{Name: "New Document", ProjectID: "CmfProject:123", Text: "Document content"}
+	doc, err := client.DocumentCreate(testCtx, params)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "publish created document CmfDocument:new-123")
+	assert.Contains(t, err.Error(), "publish failed")
+	assert.Nil(t, doc)
+}
+
 func TestClient_DocumentCreate_ResultIsIDString_FetchesCreatedDocument(t *testing.T) {
 	client, mockHTTP := newTestClientWithSequentialMock(t)
 
@@ -307,6 +418,61 @@ func TestClient_DocumentCreate_ResultIsIDString_FetchesCreatedDocument(t *testin
 	require.NotNil(t, doc)
 	assert.Equal(t, "CmfDocument:new-123", doc.ID)
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_DocumentCreate_FollowUpGet_FiltersByIDOrCode covers both forms a
+// bare create-result string can take: an ID ("CmfDocument:uuid", which
+// carries a ":" class-name prefix) or a code ("DOC-000123", which doesn't).
+// Filtering the follow-up .get by the wrong field would find nothing and
+// surface as a spurious error, prompting callers to retry and create dupes.
+func TestClient_DocumentCreate_FollowUpGet_FiltersByIDOrCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		resultValue string
+		wantField   string
+	}{
+		{"ID form filters by id", "CmfDocument:new-123", DocumentFieldID},
+		{"code form filters by code", "DOC-000123", DocumentFieldCode},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClientWithSequentialMock(t)
+
+			mockHTTP.responses = []*req.Response{
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"`+tt.resultValue+`"}`),
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"CmfDocument:new-123","code":"DOC-000123"}}`),
+			}
+
+			var followUpFilter []any
+			mockHTTP.bodyCheck = func(body []byte) bool {
+				var parsed struct {
+					Method string         `json:"method"`
+					Kwargs map[string]any `json:"kwargs"`
+				}
+				if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+					return false
+				}
+				if parsed.Method != "CmfDocument.get" {
+					return true
+				}
+				filter, ok := parsed.Kwargs["filter"].([]any)
+				if !assert.True(t, ok, "expected filter kwarg on follow-up .get") {
+					return false
+				}
+				followUpFilter = filter
+				return true
+			}
+
+			params := DocumentCreateParams{Name: "New Document", ProjectID: "CmfProject:123"}
+			doc, err := client.DocumentCreate(testCtx, params)
+
+			require.NoError(t, err)
+			require.NotNil(t, doc)
+			require.NotEmpty(t, followUpFilter, "follow-up .get should have been called with a filter")
+			assert.Equal(t, tt.wantField, followUpFilter[0])
+		})
+	}
 }
 
 // TestClient_DocumentCreate_EmptyResult_ReturnsError guards against a silent

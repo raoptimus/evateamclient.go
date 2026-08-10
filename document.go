@@ -11,6 +11,7 @@ package evateamclient
 import (
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -34,6 +35,12 @@ const (
 	DocumentFieldCmfModifiedAt = "cmf_modified_at"
 	DocumentFieldCmfOwnerID    = "cmf_owner_id"
 	DocumentFieldCmfDeleted    = "cmf_deleted"
+
+	// CmfDocument.create kwargs (OAS additionalProperties: false; differ from
+	// the read/filter field names above).
+	documentCreateParent     = "parent"      // project ID
+	documentCreateTreeParent = "tree_parent" // page-tree parent document
+	documentCreateTextDraft  = "text_draft"  // draft text; visible `text` appears after do_publish
 )
 
 var (
@@ -220,7 +227,10 @@ type DocumentCreateParams struct {
 	ParentID  string `json:"parent_id,omitempty"`
 }
 
-// DocumentCreate creates a new document
+// DocumentCreate creates a new document. Text (if given) is stored as a
+// draft: the document is only visibly published once the client also calls
+// CmfDocument.do_publish, which this method does automatically when Text is
+// non-empty.
 // Example:
 //
 //	params := evateamclient.DocumentCreateParams{
@@ -234,15 +244,15 @@ func (c *Client) DocumentCreate(
 	params DocumentCreateParams,
 ) (*models.Document, error) {
 	kwargs := map[string]any{
-		"name":       params.Name,
-		"project_id": params.ProjectID,
+		DocumentFieldName:    params.Name,
+		documentCreateParent: params.ProjectID,
 	}
 
 	if params.Text != "" {
-		kwargs["text"] = params.Text
+		kwargs[documentCreateTextDraft] = params.Text
 	}
 	if params.ParentID != "" {
-		kwargs["parent_id"] = params.ParentID
+		kwargs[documentCreateTreeParent] = params.ParentID
 	}
 
 	reqBody := &RPCRequest{
@@ -260,16 +270,59 @@ func (c *Client) DocumentCreate(
 		return nil, err
 	}
 
-	return parseWriteResult(ctx, resp.Result, "CmfDocument.create", c.documentByID, documentHasEmptyID)
+	doc, err := parseWriteResult(ctx, resp.Result, "CmfDocument.create", c.documentByID, documentHasEmptyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if params.Text != "" {
+		if pubErr := c.DocumentPublish(ctx, doc.ID); pubErr != nil {
+			return nil, errors.WithMessagef(pubErr, "publish created document %s", doc.ID)
+		}
+	}
+
+	return doc, nil
 }
 
-// documentByID fetches a document by ID, for the two-phase create/update
-// follow-up `.get` when CmfDocument.create/update returns a bare ID string.
-func (c *Client) documentByID(ctx context.Context, id string) (*models.Document, error) {
+// DocumentPublish promotes a document's draft text (text_draft) to the
+// visible `text` field via CmfDocument.do_publish.
+// Example:
+//
+//	err := client.DocumentPublish(ctx, "CmfDocument:uuid")
+func (c *Client) DocumentPublish(ctx context.Context, docID string) error {
+	if docID == "" {
+		return errors.New("docID is required")
+	}
+
+	reqBody := &RPCRequest{
+		JSONRPC: "2.2",
+		Method:  "CmfDocument.do_publish",
+		CallID:  newCallID(),
+		Args:    []any{docID},
+	}
+
+	var resp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  any    `json:"result"`
+	}
+
+	return c.doRequest(ctx, reqBody, &resp)
+}
+
+// documentByID fetches a document by ID or code, for the two-phase
+// create/update follow-up `.get` when CmfDocument.create/update returns a
+// bare string. A ":" marks the class-name-prefixed ID form; otherwise it's a
+// code (mirrors fetchTaskLinkByIDOrCode in task_link.go).
+func (c *Client) documentByID(ctx context.Context, idOrCode string) (*models.Document, error) {
+	field := DocumentFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = DocumentFieldID
+	}
+
 	qb := NewQueryBuilder().
 		Select(DefaultDocumentFields...).
 		From(EntityDocument).
-		Where(sq.Eq{DocumentFieldID: id}).
+		Where(sq.Eq{field: idOrCode}).
 		Limit(1)
 
 	doc, _, err := c.DocumentQuery(ctx, qb)

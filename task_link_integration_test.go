@@ -226,8 +226,12 @@ func TestIntegration_TaskLinkCreate_VisibleViaBothReadPaths(t *testing.T) {
 	require.NoError(t, c.TaskLinkDelete(ctx, link.ID))
 	linkDeleted = true
 
-	_, _, err = c.TaskLink(ctx, link.ID, nil)
-	assert.Error(t, err, "deleted link should no longer be readable")
+	// EVA's .get on a deleted/missing record returns 200 OK + an empty object,
+	// not an error (mcp_bugs_integration_test.go, TestIntegration_Bug_E1_...).
+	fetched, _, err := c.TaskLink(ctx, link.ID, nil)
+	if err == nil {
+		assert.Empty(t, fetched.ID, "deleted link should no longer be readable")
+	}
 }
 
 func containsTaskLinkID(links []models.TaskLink, id string) bool {

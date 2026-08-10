@@ -11,6 +11,7 @@ package evateamclient
 import (
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -311,9 +312,11 @@ func (c *Client) ListCreate(
 	ctx context.Context,
 	params *ListCreateParams,
 ) (*models.List, error) {
+	// OAS CmfList.create kwargs are {name, parent}, not the read/filter field
+	// name parent_id (additionalProperties: false).
 	kwargs := map[string]any{
-		"name":      params.Name,
-		"parent_id": params.ParentID,
+		ListFieldName:   params.Name,
+		ListFieldParent: params.ParentID,
 	}
 
 	if params.Code != "" {
@@ -347,14 +350,20 @@ func (c *Client) ListCreate(
 	return parseWriteResult(ctx, resp.Result, "CmfList.create", c.listByID, listHasEmptyID)
 }
 
-// listByID fetches a list (sprint/release) by ID, for the two-phase
+// listByID fetches a list (sprint/release) by ID or code, for the two-phase
 // create/update follow-up `.get` when CmfList.create/update returns a bare
-// ID string.
-func (c *Client) listByID(ctx context.Context, id string) (*models.List, error) {
+// string. A ":" marks the class-name-prefixed ID form; otherwise it's a code
+// (mirrors fetchTaskLinkByIDOrCode in task_link.go).
+func (c *Client) listByID(ctx context.Context, idOrCode string) (*models.List, error) {
+	field := ListFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = ListFieldID
+	}
+
 	qb := NewQueryBuilder().
 		Select(DefaultListFields...).
 		From(EntityList).
-		Where(sq.Eq{ListFieldID: id}).
+		Where(sq.Eq{field: idOrCode}).
 		Limit(1)
 
 	list, _, err := c.ListQuery(ctx, qb)

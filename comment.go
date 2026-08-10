@@ -11,6 +11,7 @@ package evateamclient
 import (
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -21,12 +22,17 @@ import (
 const (
 	CommentFieldID           = "id"
 	CommentFieldClassName    = "class_name"
+	CommentFieldCode         = "code"
 	CommentFieldText         = "text"
 	CommentFieldLogLevel     = "log_level"
 	CommentFieldParentID     = "parent_id" // parent task
 	CommentFieldAuthorID     = "cmf_author_id"
 	CommentFieldCmfCreatedAt = "cmf_created_at"
 	CommentFieldCmfOwnerID   = "cmf_owner_id"
+
+	// commentCreateParent is the CmfComment.create kwarg carrying the parent
+	// task code/ID; KB-000205: kwargs are {parent, text} (OAS additionalProperties: false).
+	commentCreateParent = "parent"
 )
 
 var (
@@ -278,8 +284,8 @@ func (c *Client) CommentCreate(
 	text string,
 ) (*models.Comment, error) {
 	kwargs := map[string]any{
-		"task_id": taskID,
-		"text":    text,
+		commentCreateParent: taskID,
+		CommentFieldText:    text,
 	}
 
 	reqBody := &RPCRequest{
@@ -300,10 +306,23 @@ func (c *Client) CommentCreate(
 	return parseWriteResult(ctx, resp.Result, "CmfComment.create", c.commentByID, commentHasEmptyID)
 }
 
-// commentByID fetches a comment by ID, for the two-phase create/update
-// follow-up `.get` when CmfComment.create/update returns a bare ID string.
-func (c *Client) commentByID(ctx context.Context, id string) (*models.Comment, error) {
-	comment, _, err := c.Comment(ctx, id, DefaultCommentFields)
+// commentByID fetches a comment by ID or code, for the two-phase create/update
+// follow-up `.get` when CmfComment.create/update returns a bare string. A ":"
+// marks the class-name-prefixed ID form; otherwise it's a code (mirrors
+// fetchTaskLinkByIDOrCode in task_link.go).
+func (c *Client) commentByID(ctx context.Context, idOrCode string) (*models.Comment, error) {
+	field := CommentFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = CommentFieldID
+	}
+
+	qb := NewQueryBuilder().
+		Select(DefaultCommentFields...).
+		From(EntityComment).
+		Where(sq.Eq{field: idOrCode}).
+		Limit(1)
+
+	comment, _, err := c.CommentQuery(ctx, qb)
 	return comment, err
 }
 

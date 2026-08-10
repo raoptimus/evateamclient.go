@@ -202,6 +202,61 @@ func TestClient_ProjectCreate_ResultIsIDString_FetchesCreatedProject(t *testing.
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
 }
 
+// TestClient_ProjectCreate_FollowUpGet_FiltersByIDOrCode covers both forms a
+// bare create-result string can take: an ID ("CmfProject:uuid", which
+// carries a ":" class-name prefix) or a code ("NEWPROJ", which doesn't).
+// Filtering the follow-up .get by the wrong field would find nothing and
+// surface as a spurious error, prompting callers to retry and create dupes.
+func TestClient_ProjectCreate_FollowUpGet_FiltersByIDOrCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		resultValue string
+		wantField   string
+	}{
+		{"ID form filters by id", "CmfProject:new-123", ProjectFieldID},
+		{"code form filters by code", "NEWPROJ", ProjectFieldCode},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClientWithSequentialMock(t)
+
+			mockHTTP.responses = []*req.Response{
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"`+tt.resultValue+`"}`),
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"CmfProject:new-123","code":"NEWPROJ"}}`),
+			}
+
+			var followUpFilter []any
+			mockHTTP.bodyCheck = func(body []byte) bool {
+				var parsed struct {
+					Method string         `json:"method"`
+					Kwargs map[string]any `json:"kwargs"`
+				}
+				if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+					return false
+				}
+				if parsed.Method != "CmfProject.get" {
+					return true
+				}
+				filter, ok := parsed.Kwargs["filter"].([]any)
+				if !assert.True(t, ok, "expected filter kwarg on follow-up .get") {
+					return false
+				}
+				followUpFilter = filter
+				return true
+			}
+
+			params := ProjectCreateParams{Code: "NEWPROJ", Name: "New Project"}
+			project, err := client.ProjectCreate(testCtx, &params)
+
+			require.NoError(t, err)
+			require.NotNil(t, project)
+			require.NotEmpty(t, followUpFilter, "follow-up .get should have been called with a filter")
+			assert.Equal(t, tt.wantField, followUpFilter[0])
+		})
+	}
+}
+
 // TestClient_ProjectCreate_EmptyResult_ReturnsError guards against a silent
 // failure (empty/null/false result) being mistaken for a zero-value project.
 func TestClient_ProjectCreate_EmptyResult_ReturnsError(t *testing.T) {
