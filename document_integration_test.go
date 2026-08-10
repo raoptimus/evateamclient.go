@@ -320,18 +320,21 @@ func TestIntegration_DocumentsList_ChildDocuments(t *testing.T) {
 // TestIntegration_DocumentCreate_UpdateDelete_FullCycle is the red-green
 // regression test for SPEC-02: DocumentCreate/DocumentUpdate/DocumentDelete
 // must actually write, not silently no-op (id-in-kwargs bug) or fail to
-// parse a bare-string result (two-phase parsing bug).
+// parse a bare-string result (two-phase parsing bug). It also covers SPEC-04
+// #4: a document created/updated with text must come back with that text
+// actually published and readable, not stuck as an invisible draft.
 func TestIntegration_DocumentCreate_UpdateDelete_FullCycle(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)
 	ctx := context.Background()
 
 	suffix := time.Now().UnixNano()
+	createText := fmt.Sprintf("created by TestIntegration_DocumentCreate_UpdateDelete_FullCycle %d", suffix)
 
 	doc, err := c.DocumentCreate(ctx, DocumentCreateParams{
 		Name:      fmt.Sprintf("[TEST] document %d", suffix),
 		ProjectID: projectID,
-		Text:      "created by TestIntegration_DocumentCreate_UpdateDelete_FullCycle",
+		Text:      createText,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, doc)
@@ -353,6 +356,8 @@ func TestIntegration_DocumentCreate_UpdateDelete_FullCycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, doc.ID, fetched.ID)
+	assert.Contains(t, fetched.Text, createText,
+		"text passed to DocumentCreate must be published and readable, not stuck as a draft")
 
 	updatedName := fmt.Sprintf("[TEST] document UPDATED %d", suffix)
 	updated, err := c.DocumentUpdate(ctx, doc.ID, map[string]any{"name": updatedName})
@@ -364,6 +369,16 @@ func TestIntegration_DocumentCreate_UpdateDelete_FullCycle(t *testing.T) {
 	reFetched, _, err := c.DocumentQuery(ctx, qb)
 	require.NoError(t, err)
 	assert.Equal(t, updatedName, reFetched.Name, "update should persist")
+
+	updatedText := fmt.Sprintf("updated text %d", suffix)
+	updatedWithText, err := c.DocumentUpdate(ctx, doc.ID, map[string]any{"text": updatedText})
+	require.NoError(t, err)
+	require.NotNil(t, updatedWithText)
+
+	textRefetched, _, err := c.DocumentQuery(ctx, qb)
+	require.NoError(t, err)
+	assert.Contains(t, textRefetched.Text, updatedText,
+		"text passed to DocumentUpdate must be published and readable, not stuck as a draft")
 
 	require.NoError(t, c.DocumentDelete(ctx, doc.ID))
 	deleted = true

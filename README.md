@@ -190,9 +190,11 @@ tasks, _, err := client.Tasks(ctx, kwargs)
 EVA's JSON-RPC methods follow one convention across resources (Projects, Tasks, Lists,
 Documents, Comments, Time Logs, Task Links):
 
-- **`create`** takes only `kwargs`, keyed by the *parent* relation (e.g. `parent`,
-  `project_id`), never `id` — each create method sends exactly the kwargs its OAS/KB spec
-  documents, nothing invented.
+- **`create`** takes only `kwargs`, keyed by the *parent* relation (e.g. `parent`, and
+  `tree_parent` for documents), never `id` — each create method sends exactly the kwargs
+  its OAS/KB spec documents, nothing invented. Exceptions with a different shape:
+  `TaskLinkCreate` (`out_link`/`in_link`/`relation_type`) and `TimeLogCreate` (`parent_id`,
+  not yet cross-checked against the OAS — see `run/BACKLOG.md` #5).
 - **`update`/`delete`** take the target `id` in `args` (`Args: []any{id}`), not `kwargs`.
 - **`create`/`update` response** is either a bare ID/code string (needs a follow-up
   `.get`, resolved automatically by the client) or the full object inline. An empty
@@ -285,8 +287,9 @@ DocumentsList(ctx, qb)                       // List with QueryBuilder
 DocumentCount(ctx, qb)                       // Count documents
 ProjectDocuments(ctx, projectID, fields)     // Get project documents
 DocumentPageTree(ctx, nodeID)                // Get document page tree hierarchy
-DocumentCreate(ctx, params)                  // Create document
-DocumentUpdate(ctx, docID, updates)          // Update document
+DocumentCreate(ctx, params)                  // Create document (auto-publishes if Text is set)
+DocumentUpdate(ctx, docID, updates)          // Update document (auto-publishes if updates["text"] is set)
+DocumentPublish(ctx, docID)                  // Publish a document's draft text (text_draft -> text)
 DocumentDelete(ctx, docID)                   // Delete document
 Documents(ctx, kwargs)                       // List with custom filters
 ```

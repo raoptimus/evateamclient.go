@@ -376,11 +376,13 @@ func TestClient_DocumentCreate_WithText_SendsTextDraftAndPublishes(t *testing.T)
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + do_publish")
 }
 
-// TestClient_DocumentCreate_WithText_PublishFails_ReturnsWrappedError checks
-// that a publish failure isn't silently swallowed (the create would otherwise
-// look successful while the text stays an invisible draft), and that the
-// created document's ID is preserved in the error so it isn't lost.
-func TestClient_DocumentCreate_WithText_PublishFails_ReturnsWrappedError(t *testing.T) {
+// TestClient_DocumentCreate_WithText_PublishFails_ReturnsDocumentAndWrappedError
+// checks that a publish failure isn't silently swallowed (the create would
+// otherwise look successful while the text stays an invisible draft), and
+// that the created document itself is still returned alongside the error —
+// losing it would make a caller retry the create and produce a duplicate
+// (SPEC-04 #2).
+func TestClient_DocumentCreate_WithText_PublishFails_ReturnsDocumentAndWrappedError(t *testing.T) {
 	client, mockHTTP := newTestClientWithSequentialMock(t)
 
 	mockHTTP.responses = []*req.Response{
@@ -395,9 +397,10 @@ func TestClient_DocumentCreate_WithText_PublishFails_ReturnsWrappedError(t *test
 	doc, err := client.DocumentCreate(testCtx, params)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "publish created document CmfDocument:new-123")
+	assert.Contains(t, err.Error(), "document CmfDocument:new-123 created, publish failed; do not retry create")
 	assert.Contains(t, err.Error(), "publish failed")
-	assert.Nil(t, doc)
+	require.NotNil(t, doc)
+	assert.Equal(t, "CmfDocument:new-123", doc.ID, "created document must not be lost on publish failure")
 }
 
 func TestClient_DocumentCreate_ResultIsIDString_FetchesCreatedDocument(t *testing.T) {
@@ -557,6 +560,102 @@ func TestClient_DocumentUpdate_ResultIsIDString_FetchesUpdatedDocument(t *testin
 	require.NotNil(t, doc)
 	assert.Equal(t, "Updated Document", doc.Name)
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+// TestClient_DocumentUpdate_WithText_SendsTextDraftAndPublishes is the
+// regression test for SPEC-04 #3: a `text` key in updates has no OAS kwarg on
+// CmfDocument.update (additionalProperties: false), so it must be sent as
+// text_draft, and — since the caller passing `text` wants a visible result —
+// followed by an automatic CmfDocument.do_publish.
+func TestClient_DocumentUpdate_WithText_SendsTextDraftAndPublishes(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:123", "code": "DOC-001", "name": "Updated Document"}
+		}`),
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":true}`),
+	}
+
+	var updateKwargs map[string]any
+	var publishMethod string
+	var publishArgs []any
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Method string         `json:"method"`
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		switch parsed.Method {
+		case "CmfDocument.update":
+			updateKwargs = parsed.Kwargs
+		case "CmfDocument.do_publish":
+			publishMethod = parsed.Method
+			publishArgs = parsed.Args
+		}
+		return true
+	}
+
+	updates := map[string]any{"text": "Updated content"}
+	doc, err := client.DocumentUpdate(testCtx, "CmfDocument:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	assert.Equal(t, map[string]any{"text_draft": "Updated content"}, updateKwargs)
+	assert.Equal(t, "CmfDocument.do_publish", publishMethod)
+	assert.Equal(t, []any{"CmfDocument:123"}, publishArgs)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + do_publish")
+	assert.Equal(t, map[string]any{"text": "Updated content"}, updates, "input map must not be mutated")
+}
+
+// TestClient_DocumentUpdate_WithTextDraft_DoesNotPublish covers the "save a
+// draft" path from SPEC-04 #3: passing text_draft directly is an explicit
+// choice not to publish, so DocumentUpdate must not call do_publish.
+func TestClient_DocumentUpdate_WithTextDraft_DoesNotPublish(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+
+	mockHTTP.response = mockResponse(http.StatusOK, `{
+		"jsonrpc": "2.2",
+		"result": {"id": "CmfDocument:123", "code": "DOC-001", "name": "Updated Document"}
+	}`)
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		return assert.NotContains(t, string(body), "do_publish")
+	}
+
+	updates := map[string]any{"text_draft": "Draft content"}
+	doc, err := client.DocumentUpdate(testCtx, "CmfDocument:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	assert.Equal(t, 1, mockHTTP.calls, "text_draft must not trigger publish")
+}
+
+// TestClient_DocumentUpdate_WithText_PublishFails_ReturnsDocumentAndWrappedError
+// mirrors the create-side SPEC-04 #2 fix: an update that changed the text but
+// failed to publish must still return the updated document, not lose it.
+func TestClient_DocumentUpdate_WithText_PublishFails_ReturnsDocumentAndWrappedError(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:123", "code": "DOC-001", "name": "Updated Document"}
+		}`),
+	}
+	mockHTTP.errors = []error{nil, errors.New("publish failed")}
+
+	updates := map[string]any{"text": "Updated content"}
+	doc, err := client.DocumentUpdate(testCtx, "CmfDocument:123", updates)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "document CmfDocument:123 updated, publish failed; do not retry update")
+	assert.Contains(t, err.Error(), "publish failed")
+	require.NotNil(t, doc)
+	assert.Equal(t, "CmfDocument:123", doc.ID, "updated document must not be lost on publish failure")
 }
 
 func TestClient_DocumentUpdate_EmptyDocID_ReturnsErrorWithoutRequest(t *testing.T) {

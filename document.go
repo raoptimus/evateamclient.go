@@ -277,7 +277,7 @@ func (c *Client) DocumentCreate(
 
 	if params.Text != "" {
 		if pubErr := c.DocumentPublish(ctx, doc.ID); pubErr != nil {
-			return nil, errors.WithMessagef(pubErr, "publish created document %s", doc.ID)
+			return doc, errors.WithMessagef(pubErr, "document %s created, publish failed; do not retry create", doc.ID)
 		}
 	}
 
@@ -333,7 +333,11 @@ func documentHasEmptyID(doc *models.Document) bool {
 	return doc == nil || doc.ID == ""
 }
 
-// DocumentUpdate updates an existing document
+// DocumentUpdate updates an existing document. A `text` key in updates is
+// sent as text_draft (OAS: CmfDocument.update has no plain `text` kwarg) and,
+// once applied, published automatically via DocumentPublish so the change
+// becomes visible; pass `text_draft` directly instead to save a draft without
+// publishing.
 // Example:
 //
 //	updates := map[string]any{
@@ -350,12 +354,23 @@ func (c *Client) DocumentUpdate(
 		return nil, errors.New("docID is required")
 	}
 
+	text, hasText := updates[DocumentFieldText]
+	kwargs := updates
+	if hasText {
+		kwargs = make(map[string]any, len(updates))
+		for k, v := range updates {
+			kwargs[k] = v
+		}
+		delete(kwargs, DocumentFieldText)
+		kwargs[documentCreateTextDraft] = text
+	}
+
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfDocument.update",
 		CallID:  newCallID(),
 		Args:    []any{docID},
-		Kwargs:  updates,
+		Kwargs:  kwargs,
 	}
 
 	var resp struct {
@@ -366,7 +381,18 @@ func (c *Client) DocumentUpdate(
 		return nil, err
 	}
 
-	return parseWriteResult(ctx, resp.Result, "CmfDocument.update", c.documentByID, documentHasEmptyID)
+	doc, err := parseWriteResult(ctx, resp.Result, "CmfDocument.update", c.documentByID, documentHasEmptyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if hasText {
+		if pubErr := c.DocumentPublish(ctx, doc.ID); pubErr != nil {
+			return doc, errors.WithMessagef(pubErr, "document %s updated, publish failed; do not retry update", doc.ID)
+		}
+	}
+
+	return doc, nil
 }
 
 // DocumentDelete deletes a document by ID
