@@ -26,9 +26,11 @@ type mockHTTPClient struct {
 	err       error
 	urlCheck  func(string) bool
 	bodyCheck func([]byte) bool
+	calls     int // number of Post invocations; lets tests prove no HTTP request was made
 }
 
 func (m *mockHTTPClient) Post(ctx context.Context, body []byte, url string) (*req.Response, error) {
+	m.calls++
 	if m.urlCheck != nil && !m.urlCheck(url) {
 		return nil, fmt.Errorf("request url does not match")
 	}

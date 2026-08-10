@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	encjson "encoding/json"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -330,14 +331,30 @@ func (c *Client) parseTaskLinkCreateResult(ctx context.Context, raw encjson.RawM
 	case len(trimmed) == 0, string(trimmed) == "null", string(trimmed) == "false", string(trimmed) == `""`:
 		return nil, errors.New(errEmptyResult)
 	case trimmed[0] == '"':
-		var id string
-		if err := encjson.Unmarshal(trimmed, &id); err != nil {
+		var idOrCode string
+		if err := encjson.Unmarshal(trimmed, &idOrCode); err != nil {
 			return nil, errors.WithMessage(err, "parse CmfRelationOption.create result")
 		}
 
-		link, _, err := c.TaskLink(ctx, id, DefaultTaskLinkFields)
+		// The bare string can be an ID ("CmfRelationOption:uuid") or a code
+		// ("RLO-000123"); only IDs carry the ":" class-name prefix.
+		field := TaskLinkFieldCode
+		if strings.Contains(idOrCode, ":") {
+			field = TaskLinkFieldID
+		}
+
+		qb := NewQueryBuilder().
+			Select(DefaultTaskLinkFields...).
+			From(EntityRelation).
+			Where(sq.Eq{field: idOrCode}).
+			Limit(1)
+
+		link, _, err := c.TaskLinkQuery(ctx, qb)
 		if err != nil {
-			return nil, errors.WithMessagef(err, "fetch created task link %s", id)
+			return nil, errors.WithMessagef(err, "fetch created task link %s", idOrCode)
+		}
+		if link == nil || link.ID == "" {
+			return nil, errors.New(errEmptyResult)
 		}
 		return link, nil
 	default:
@@ -371,9 +388,11 @@ func (c *Client) TaskLinkDelete(
 		Args:    []any{linkID},
 	}
 
+	// CmfRelationOption.delete is undocumented in the OAS; the result shape is
+	// unknown, so decode leniently like TaskDelete does.
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

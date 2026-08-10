@@ -294,8 +294,81 @@ func TestClient_TaskLinkCreate_ResultIsIDString_FetchesCreatedLink(t *testing.T)
 	require.NoError(t, err)
 	require.NotNil(t, link)
 	assert.Equal(t, "CmfRelationOption:new-123", link.ID)
-	assert.Equal(t, "system.link", link.RelationType)
+	assert.Equal(t, "system.link", string(link.RelationType))
 	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_TaskLinkCreate_FollowUpGetReturnsEmptyLink_ReturnsError guards
+// against the follow-up .get silently succeeding with a zero-value TaskLink
+// (empty ID) — that is exactly the "silent empty object" the create fix was
+// meant to eliminate.
+func TestClient_TaskLinkCreate_FollowUpGetReturnsEmptyLink_ReturnsError(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfRelationOption:new-123"}`),
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{}}`),
+	}
+
+	link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", RelationTypeLink)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "CmfRelationOption.create returned empty result")
+	assert.Nil(t, link)
+}
+
+// TestClient_TaskLinkCreate_FollowUpGet_FiltersByIDOrCode covers both forms a
+// bare create-result string can take: an ID ("CmfRelationOption:uuid", which
+// carries a ":" class-name prefix) or a code ("RLO-000123", which doesn't).
+// Filtering the follow-up .get by the wrong field would find nothing and
+// surface as a spurious error, prompting callers to retry and create dupes.
+func TestClient_TaskLinkCreate_FollowUpGet_FiltersByIDOrCode(t *testing.T) {
+	tests := []struct {
+		name        string
+		resultValue string
+		wantField   string
+	}{
+		{"ID form filters by id", "CmfRelationOption:new-123", TaskLinkFieldID},
+		{"code form filters by code", "RLO-000123", TaskLinkFieldCode},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClientWithSequentialMock(t)
+
+			mockHTTP.responses = []*req.Response{
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"`+tt.resultValue+`"}`),
+				mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":{"id":"CmfRelationOption:new-123","code":"RLO-000123"}}`),
+			}
+
+			var followUpFilter []any
+			mockHTTP.bodyCheck = func(body []byte) bool {
+				var parsed struct {
+					Method string         `json:"method"`
+					Kwargs map[string]any `json:"kwargs"`
+				}
+				if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+					return false
+				}
+				if parsed.Method != "CmfRelationOption.get" {
+					return true
+				}
+				filter, ok := parsed.Kwargs["filter"].([]any)
+				if !assert.True(t, ok, "expected filter kwarg on follow-up .get") {
+					return false
+				}
+				followUpFilter = filter
+				return true
+			}
+
+			link, err := client.TaskLinkCreate(testCtx, "CmfTask:source", "CmfTask:target", RelationTypeLink)
+
+			require.NoError(t, err)
+			require.NotNil(t, link)
+			require.NotEmpty(t, followUpFilter, "follow-up .get should have been called with a filter")
+			assert.Equal(t, tt.wantField, followUpFilter[0])
+		})
+	}
 }
 
 func TestClient_TaskLinkCreate_EmptyResult_ReturnsError(t *testing.T) {
@@ -341,6 +414,7 @@ func TestClient_TaskLinkCreate_EmptyArgument_ReturnsErrorWithoutRequest(t *testi
 
 			require.Error(t, err)
 			assert.Nil(t, link)
+			assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 		})
 	}
 }
@@ -376,6 +450,31 @@ func TestClient_TaskLinkDelete_Success_SendsIDInArgs(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestClient_TaskLinkDelete_NonBooleanResult_Succeeds pins the TaskDelete
+// convention (task.go, Result any): CmfRelationOption.delete has no fixed
+// response shape in the OAS, so a non-bool result (an ID echo, or an empty
+// object) must not be reported as an error on an otherwise successful delete.
+func TestClient_TaskLinkDelete_NonBooleanResult_Succeeds(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"id string", `"CmfRelationOption:1"`},
+		{"empty object", `{}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			err := client.TaskLinkDelete(testCtx, "CmfRelationOption:123")
+
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestClient_TaskLinkDelete_EmptyLinkID_ReturnsErrorWithoutRequest(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 	mockHTTP.err = errors.New("must not be called")
@@ -383,6 +482,7 @@ func TestClient_TaskLinkDelete_EmptyLinkID_ReturnsErrorWithoutRequest(t *testing
 	err := client.TaskLinkDelete(testCtx, "")
 
 	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }
 
 func TestClient_TaskLink_InLinkOutLink_StringForm_ParsesAsID(t *testing.T) {
@@ -404,7 +504,7 @@ func TestClient_TaskLink_InLinkOutLink_StringForm_ParsesAsID(t *testing.T) {
 	link, _, err := client.TaskLink(testCtx, "CmfRelationOption:123", nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, "system.link", link.RelationType)
+	assert.Equal(t, "system.link", string(link.RelationType))
 	require.NotNil(t, link.InLink)
 	assert.Equal(t, "CmfTask:target", link.InLink.ID)
 	require.NotNil(t, link.OutLink)

@@ -25,14 +25,19 @@ import (
 // newTaskLinkServer creates an httptest.Server tailored for TaskLinkTools tests.
 // The handler receives the parsed request kwargs and method name and returns the
 // raw JSON to write as the response body. Returning "" causes a 400 response so
-// the caller can detect unexpected calls.
+// the caller can detect unexpected calls. The returned *int counts every HTTP
+// request the server received, so tests can prove a validation failure never
+// reached the network (asserting on the error alone doesn't: a rejected mock
+// request also produces an error).
 func newTaskLinkServer(
 	t *testing.T,
 	handler func(method string, kwargs map[string]any) (responseJSON string),
-) *tools.TaskLinkTools {
+) (*tools.TaskLinkTools, *int) {
 	t.Helper()
 
+	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		body, _ := io.ReadAll(r.Body)
 		method := r.URL.Query().Get("m")
 
@@ -57,7 +62,7 @@ func newTaskLinkServer(
 		APIToken: "test-token",
 	})
 	require.NoError(t, err)
-	return tools.NewTaskLinkTools(client)
+	return tools.NewTaskLinkTools(client), &calls
 }
 
 // TestTaskLinkCreate_DefaultsRelationType_WhenEmpty pins the MCP-level default:
@@ -65,7 +70,7 @@ func newTaskLinkServer(
 // than erroring, per SPEC item 4.
 func TestTaskLinkCreate_DefaultsRelationType_WhenEmpty(t *testing.T) {
 	var captured map[string]any
-	tt := newTaskLinkServer(t, func(method string, kwargs map[string]any) string {
+	tt, _ := newTaskLinkServer(t, func(method string, kwargs map[string]any) string {
 		if method == "CmfRelationOption.create" {
 			captured = kwargs
 			return `{"jsonrpc":"2.2","result":{"id":"CmfRelationOption:1","code":"RLO-001"}}`
@@ -88,7 +93,7 @@ func TestTaskLinkCreate_DefaultsRelationType_WhenEmpty(t *testing.T) {
 // reaches CmfRelationOption.create unchanged.
 func TestTaskLinkCreate_RelationType_Passthrough(t *testing.T) {
 	var captured map[string]any
-	tt := newTaskLinkServer(t, func(method string, kwargs map[string]any) string {
+	tt, _ := newTaskLinkServer(t, func(method string, kwargs map[string]any) string {
 		if method == "CmfRelationOption.create" {
 			captured = kwargs
 			return `{"jsonrpc":"2.2","result":{"id":"CmfRelationOption:1","code":"RLO-001"}}`
@@ -111,13 +116,17 @@ func TestTaskLinkCreate_RelationType_Passthrough(t *testing.T) {
 }
 
 // TestTaskLinkCreate_MissingSourceOrTarget_ReturnsErrorWithoutRequest ensures
-// missing task ids fail fast, without a HTTP round-trip.
+// missing task ids fail fast, without a HTTP round-trip. Asserting on the
+// error alone would not prove this: the handler below returns "" for any
+// method, which also produces an error via the (would-be) HTTP call.
 func TestTaskLinkCreate_MissingSourceOrTarget_ReturnsErrorWithoutRequest(t *testing.T) {
-	tt := newTaskLinkServer(t, func(string, map[string]any) string { return "" })
+	tt, calls := newTaskLinkServer(t, func(string, map[string]any) string { return "" })
 
 	_, err := tt.TaskLinkCreate(context.Background(), tools.TaskLinkCreateInput{TargetTaskID: "TSK-000002"})
 	assert.Error(t, err)
 
 	_, err = tt.TaskLinkCreate(context.Background(), tools.TaskLinkCreateInput{SourceTaskID: "TSK-000001"})
 	assert.Error(t, err)
+
+	assert.Equal(t, 0, *calls, "validation must fail before any HTTP request")
 }
