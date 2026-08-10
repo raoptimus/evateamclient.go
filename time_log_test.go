@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -256,7 +258,56 @@ func TestClient_TimeLogCreate_Success_ReturnsTimeLog(t *testing.T) {
 	assert.Equal(t, 180, log.TimeSpent)
 }
 
-func TestClient_TimeLogUpdate_Success_ReturnsUpdatedTimeLog(t *testing.T) {
+func TestClient_TimeLogCreate_ResultIsIDString_FetchesCreatedTimeLog(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfTimeTrackerHistory:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfTimeTrackerHistory:new-123", "time_spent": 180, "parent_id": "CmfTask:456"}
+		}`),
+	}
+
+	params := TimeLogCreateParams{ParentID: "CmfTask:456", TimeSpent: 180}
+	log, err := client.TimeLogCreate(testCtx, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, log)
+	assert.Equal(t, "CmfTimeTrackerHistory:new-123", log.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_TimeLogCreate_EmptyResult_ReturnsError guards against a silent
+// failure (empty/null/false result) being mistaken for a zero-value time log.
+func TestClient_TimeLogCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			params := TimeLogCreateParams{ParentID: "CmfTask:456", TimeSpent: 180}
+			log, err := client.TimeLogCreate(testCtx, params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfTimeTrackerHistory.create returned empty result")
+			assert.Nil(t, log)
+		})
+	}
+}
+
+// TestClient_TimeLogUpdate_Success_SendsIDInArgs is the regression test for
+// the EVA update convention: the id belongs in Args, not Kwargs (see TaskUpdate).
+func TestClient_TimeLogUpdate_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -271,6 +322,17 @@ func TestClient_TimeLogUpdate_Success_ReturnsUpdatedTimeLog(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfTimeTrackerHistory.update")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfTimeTrackerHistory:123"}, parsed.Args) &&
+			assert.Equal(t, map[string]any{"time_spent": float64(240)}, parsed.Kwargs)
+	}
 
 	updates := map[string]any{"time_spent": 240}
 	log, err := client.TimeLogUpdate(testCtx, "CmfTimeTrackerHistory:123", updates)
@@ -279,7 +341,40 @@ func TestClient_TimeLogUpdate_Success_ReturnsUpdatedTimeLog(t *testing.T) {
 	assert.Equal(t, 240, log.TimeSpent)
 }
 
-func TestClient_TimeLogDelete_Success_ReturnsNoError(t *testing.T) {
+func TestClient_TimeLogUpdate_ResultIsIDString_FetchesUpdatedTimeLog(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfTimeTrackerHistory:123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfTimeTrackerHistory:123", "time_spent": 240}
+		}`),
+	}
+
+	updates := map[string]any{"time_spent": 240}
+	log, err := client.TimeLogUpdate(testCtx, "CmfTimeTrackerHistory:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, log)
+	assert.Equal(t, 240, log.TimeSpent)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+func TestClient_TimeLogUpdate_EmptyTimeLogID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	log, err := client.TimeLogUpdate(testCtx, "", map[string]any{"time_spent": 240})
+
+	require.Error(t, err)
+	assert.Nil(t, log)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
+}
+
+// TestClient_TimeLogDelete_Success_SendsIDInArgs is the regression test for
+// the EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_TimeLogDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -291,8 +386,29 @@ func TestClient_TimeLogDelete_Success_ReturnsNoError(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfTimeTrackerHistory.delete")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfTimeTrackerHistory:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
+	}
 
 	err := client.TimeLogDelete(testCtx, "CmfTimeTrackerHistory:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_TimeLogDelete_EmptyTimeLogID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.TimeLogDelete(testCtx, "")
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }

@@ -10,8 +10,10 @@ package evateamclient
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -162,7 +164,7 @@ func (c *Client) CommentCount(
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.count",
+		Method:  "CmfComment.count",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
@@ -282,17 +284,31 @@ func (c *Client) CommentCreate(
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.create",
+		Method:  "CmfComment.create",
 		CallID:  newCallID(),
 		Kwargs:  kwargs,
 	}
 
-	var resp models.CommentResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfComment.create", c.commentByID, commentHasEmptyID)
+}
+
+// commentByID fetches a comment by ID, for the two-phase create/update
+// follow-up `.get` when CmfComment.create/update returns a bare ID string.
+func (c *Client) commentByID(ctx context.Context, id string) (*models.Comment, error) {
+	comment, _, err := c.Comment(ctx, id, DefaultCommentFields)
+	return comment, err
+}
+
+func commentHasEmptyID(comment *models.Comment) bool {
+	return comment == nil || comment.ID == ""
 }
 
 // CommentUpdate updates an existing comment
@@ -304,24 +320,29 @@ func (c *Client) CommentUpdate(
 	commentID string,
 	text string,
 ) (*models.Comment, error) {
-	kwargs := map[string]any{
-		"id":   commentID,
-		"text": text,
+	if commentID == "" {
+		return nil, errors.New("commentID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.update",
+		Method:  "CmfComment.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{commentID},
+		Kwargs: map[string]any{
+			"text": text,
+		},
 	}
 
-	var resp models.CommentResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfComment.update", c.commentByID, commentHasEmptyID)
 }
 
 // CommentDelete deletes a comment by ID
@@ -332,20 +353,20 @@ func (c *Client) CommentDelete(
 	ctx context.Context,
 	commentID string,
 ) error {
-	kwargs := map[string]any{
-		"id": commentID,
+	if commentID == "" {
+		return errors.New("commentID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
-		Method:  "Comment.delete",
+		Method:  "CmfComment.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{commentID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

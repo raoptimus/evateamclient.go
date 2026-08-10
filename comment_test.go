@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -115,7 +117,7 @@ func TestClient_CommentCount_Success_ReturnsCount(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.count")
+		return assert.Contains(t, url, "m=CmfComment.count")
 	}
 
 	qb := NewQueryBuilder().From(EntityComment)
@@ -222,7 +224,7 @@ func TestClient_CommentCreate_Success_ReturnsComment(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.create")
+		return assert.Contains(t, url, "m=CmfComment.create")
 	}
 	mockHTTP.bodyCheck = func(body []byte) bool {
 		return assert.Contains(t, string(body), "New comment")
@@ -235,7 +237,54 @@ func TestClient_CommentCreate_Success_ReturnsComment(t *testing.T) {
 	assert.Equal(t, "New comment", comment.Text)
 }
 
-func TestClient_CommentUpdate_Success_ReturnsUpdatedComment(t *testing.T) {
+func TestClient_CommentCreate_ResultIsIDString_FetchesCreatedComment(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"Comment:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "Comment:new-123", "text": "New comment"}
+		}`),
+	}
+
+	comment, err := client.CommentCreate(testCtx, "Task:PROJ-123", "New comment")
+
+	require.NoError(t, err)
+	require.NotNil(t, comment)
+	assert.Equal(t, "Comment:new-123", comment.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_CommentCreate_EmptyResult_ReturnsError guards against a silent
+// failure (empty/null/false result) being mistaken for a zero-value comment.
+func TestClient_CommentCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			comment, err := client.CommentCreate(testCtx, "Task:PROJ-123", "New comment")
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfComment.create returned empty result")
+			assert.Nil(t, comment)
+		})
+	}
+}
+
+// TestClient_CommentUpdate_Success_SendsIDInArgs is the regression test for
+// the EVA update convention: the id belongs in Args, not Kwargs (see TaskUpdate).
+func TestClient_CommentUpdate_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -248,7 +297,18 @@ func TestClient_CommentUpdate_Success_ReturnsUpdatedComment(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.update")
+		return assert.Contains(t, url, "m=CmfComment.update")
+	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"Comment:123"}, parsed.Args) &&
+			assert.Equal(t, map[string]any{"text": "Updated comment"}, parsed.Kwargs)
 	}
 
 	comment, err := client.CommentUpdate(testCtx, "Comment:123", "Updated comment")
@@ -257,7 +317,39 @@ func TestClient_CommentUpdate_Success_ReturnsUpdatedComment(t *testing.T) {
 	assert.Equal(t, "Updated comment", comment.Text)
 }
 
-func TestClient_CommentDelete_Success_ReturnsNoError(t *testing.T) {
+func TestClient_CommentUpdate_ResultIsIDString_FetchesUpdatedComment(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"Comment:123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "Comment:123", "text": "Updated comment"}
+		}`),
+	}
+
+	comment, err := client.CommentUpdate(testCtx, "Comment:123", "Updated comment")
+
+	require.NoError(t, err)
+	require.NotNil(t, comment)
+	assert.Equal(t, "Updated comment", comment.Text)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+func TestClient_CommentUpdate_EmptyCommentID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	comment, err := client.CommentUpdate(testCtx, "", "text")
+
+	require.Error(t, err)
+	assert.Nil(t, comment)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
+}
+
+// TestClient_CommentDelete_Success_SendsIDInArgs is the regression test for
+// the EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_CommentDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -267,10 +359,31 @@ func TestClient_CommentDelete_Success_ReturnsNoError(t *testing.T) {
 
 	mockHTTP.response = mockResponse(http.StatusOK, respBody)
 	mockHTTP.urlCheck = func(url string) bool {
-		return assert.Contains(t, url, "m=Comment.delete")
+		return assert.Contains(t, url, "m=CmfComment.delete")
+	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"Comment:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
 	}
 
 	err := client.CommentDelete(testCtx, "Comment:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_CommentDelete_EmptyCommentID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.CommentDelete(testCtx, "")
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }

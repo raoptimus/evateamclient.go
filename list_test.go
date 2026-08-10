@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -221,7 +223,56 @@ func TestClient_ListCreate_Success_ReturnsList(t *testing.T) {
 	assert.Equal(t, "New Sprint", list.Name)
 }
 
-func TestClient_ListUpdate_Success_ReturnsUpdatedList(t *testing.T) {
+func TestClient_ListCreate_ResultIsIDString_FetchesCreatedList(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfList:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfList:new-123", "code": "SPR-100", "name": "New Sprint"}
+		}`),
+	}
+
+	params := ListCreateParams{Name: "New Sprint", ParentID: "CmfProject:123"}
+	list, err := client.ListCreate(testCtx, &params)
+
+	require.NoError(t, err)
+	require.NotNil(t, list)
+	assert.Equal(t, "CmfList:new-123", list.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_ListCreate_EmptyResult_ReturnsError guards against a silent
+// failure (empty/null/false result) being mistaken for a zero-value list.
+func TestClient_ListCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			params := ListCreateParams{Name: "New Sprint", ParentID: "CmfProject:123"}
+			list, err := client.ListCreate(testCtx, &params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfList.create returned empty result")
+			assert.Nil(t, list)
+		})
+	}
+}
+
+// TestClient_ListUpdate_Success_SendsIDInArgs is the regression test for the
+// EVA update convention: the id belongs in Args, not Kwargs (see TaskUpdate).
+func TestClient_ListUpdate_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -237,12 +288,54 @@ func TestClient_ListUpdate_Success_ReturnsUpdatedList(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfList.update")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfList:123"}, parsed.Args) &&
+			assert.Equal(t, map[string]any{"name": "Updated Sprint"}, parsed.Kwargs)
+	}
 
 	updates := map[string]any{"name": "Updated Sprint"}
 	list, err := client.ListUpdate(testCtx, "CmfList:123", updates)
 
 	require.NoError(t, err)
 	assert.Equal(t, "Updated Sprint", list.Name)
+}
+
+func TestClient_ListUpdate_ResultIsIDString_FetchesUpdatedList(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfList:123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfList:123", "code": "SPR-001", "name": "Updated Sprint"}
+		}`),
+	}
+
+	updates := map[string]any{"name": "Updated Sprint"}
+	list, err := client.ListUpdate(testCtx, "CmfList:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, list)
+	assert.Equal(t, "Updated Sprint", list.Name)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+func TestClient_ListUpdate_EmptyListID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	list, err := client.ListUpdate(testCtx, "", map[string]any{"name": "x"})
+
+	require.Error(t, err)
+	assert.Nil(t, list)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }
 
 func TestClient_ListClose_Success_ReturnsClosedList(t *testing.T) {
@@ -267,7 +360,9 @@ func TestClient_ListClose_Success_ReturnsClosedList(t *testing.T) {
 	assert.Equal(t, "CLOSED", list.CacheStatusType)
 }
 
-func TestClient_ListDelete_Success_ReturnsNoError(t *testing.T) {
+// TestClient_ListDelete_Success_SendsIDInArgs is the regression test for the
+// EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_ListDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -279,10 +374,31 @@ func TestClient_ListDelete_Success_ReturnsNoError(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfList.delete")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfList:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
+	}
 
 	err := client.ListDelete(testCtx, "CmfList:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_ListDelete_EmptyListID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.ListDelete(testCtx, "")
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }
 
 func TestClient_ProjectSprints_Success_ReturnsSprints(t *testing.T) {

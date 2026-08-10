@@ -10,8 +10,10 @@ package evateamclient
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/stretchr/testify/assert"
@@ -204,6 +206,54 @@ func TestIntegration_TaskComments(t *testing.T) {
 		assert.NotEmpty(t, comment.AuthorID)
 		assert.False(t, comment.CreatedAt.IsZero(), "CreatedAt should be parsed")
 	}
+}
+
+// TestIntegration_CommentCreate_UpdateDelete_FullCycle is the red-green
+// regression test for SPEC-02: CommentCreate/CommentUpdate/CommentDelete
+// must actually write, not silently no-op (id-in-kwargs bug), fail to parse
+// a bare-string result (two-phase parsing bug), or call the nonexistent
+// "Comment" class instead of "CmfComment".
+func TestIntegration_CommentCreate_UpdateDelete_FullCycle(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	taskID := getIntegrationTaskID(t, c, projectID)
+	suffix := time.Now().UnixNano()
+
+	comment, err := c.CommentCreate(ctx, taskID, fmt.Sprintf("[TEST] comment %d", suffix))
+	require.NoError(t, err)
+	require.NotNil(t, comment)
+	require.NotEmpty(t, comment.ID, "CommentCreate must return a created comment, not a silent no-op")
+
+	deleted := false
+	t.Cleanup(func() {
+		if !deleted {
+			_ = c.CommentDelete(context.Background(), comment.ID)
+		}
+	})
+
+	fetched, _, err := c.Comment(ctx, comment.ID, DefaultCommentFields)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, comment.ID, fetched.ID)
+
+	updatedText := fmt.Sprintf("[TEST] comment UPDATED %d", suffix)
+	updated, err := c.CommentUpdate(ctx, comment.ID, updatedText)
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	assert.Equal(t, comment.ID, updated.ID, "update should return same comment ID")
+	assert.Equal(t, updatedText, updated.Text)
+
+	reFetched, _, err := c.Comment(ctx, comment.ID, DefaultCommentFields)
+	require.NoError(t, err)
+	assert.Equal(t, updatedText, reFetched.Text, "update should persist")
+
+	require.NoError(t, c.CommentDelete(ctx, comment.ID))
+	deleted = true
+
+	_, _, err = c.Comment(ctx, comment.ID, DefaultCommentFields)
+	assert.Error(t, err, "deleted comment should no longer be readable")
 }
 
 func TestIntegration_Comments_Deprecated(t *testing.T) {

@@ -10,9 +10,11 @@ package evateamclient
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/stretchr/testify/assert"
@@ -313,6 +315,61 @@ func TestIntegration_DocumentsList_ChildDocuments(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "original child document should be in the children list")
+}
+
+// TestIntegration_DocumentCreate_UpdateDelete_FullCycle is the red-green
+// regression test for SPEC-02: DocumentCreate/DocumentUpdate/DocumentDelete
+// must actually write, not silently no-op (id-in-kwargs bug) or fail to
+// parse a bare-string result (two-phase parsing bug).
+func TestIntegration_DocumentCreate_UpdateDelete_FullCycle(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	suffix := time.Now().UnixNano()
+
+	doc, err := c.DocumentCreate(ctx, DocumentCreateParams{
+		Name:      fmt.Sprintf("[TEST] document %d", suffix),
+		ProjectID: projectID,
+		Text:      "created by TestIntegration_DocumentCreate_UpdateDelete_FullCycle",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	require.NotEmpty(t, doc.ID, "DocumentCreate must return a created document, not a silent no-op")
+
+	deleted := false
+	t.Cleanup(func() {
+		if !deleted {
+			_ = c.DocumentDelete(context.Background(), doc.ID)
+		}
+	})
+
+	qb := NewQueryBuilder().
+		Select(DefaultDocumentFields...).
+		From(EntityDocument).
+		Where(sq.Eq{DocumentFieldID: doc.ID}).
+		Limit(1)
+	fetched, _, err := c.DocumentQuery(ctx, qb)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, doc.ID, fetched.ID)
+
+	updatedName := fmt.Sprintf("[TEST] document UPDATED %d", suffix)
+	updated, err := c.DocumentUpdate(ctx, doc.ID, map[string]any{"name": updatedName})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	assert.Equal(t, doc.ID, updated.ID, "update should return same document ID")
+	assert.Equal(t, updatedName, updated.Name)
+
+	reFetched, _, err := c.DocumentQuery(ctx, qb)
+	require.NoError(t, err)
+	assert.Equal(t, updatedName, reFetched.Name, "update should persist")
+
+	require.NoError(t, c.DocumentDelete(ctx, doc.ID))
+	deleted = true
+
+	_, _, err = c.DocumentQuery(ctx, qb)
+	assert.Error(t, err, "deleted document should no longer be readable")
 }
 
 func TestIntegration_Documents_Deprecated(t *testing.T) {

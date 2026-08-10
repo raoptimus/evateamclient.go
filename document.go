@@ -10,8 +10,10 @@ package evateamclient
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -250,12 +252,32 @@ func (c *Client) DocumentCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.DocumentResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfDocument.create", c.documentByID, documentHasEmptyID)
+}
+
+// documentByID fetches a document by ID, for the two-phase create/update
+// follow-up `.get` when CmfDocument.create/update returns a bare ID string.
+func (c *Client) documentByID(ctx context.Context, id string) (*models.Document, error) {
+	qb := NewQueryBuilder().
+		Select(DefaultDocumentFields...).
+		From(EntityDocument).
+		Where(sq.Eq{DocumentFieldID: id}).
+		Limit(1)
+
+	doc, _, err := c.DocumentQuery(ctx, qb)
+	return doc, err
+}
+
+func documentHasEmptyID(doc *models.Document) bool {
+	return doc == nil || doc.ID == ""
 }
 
 // DocumentUpdate updates an existing document
@@ -271,26 +293,27 @@ func (c *Client) DocumentUpdate(
 	docID string,
 	updates map[string]any,
 ) (*models.Document, error) {
-	kwargs := map[string]any{
-		"id": docID,
-	}
-	for k, v := range updates {
-		kwargs[k] = v
+	if docID == "" {
+		return nil, errors.New("docID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfDocument.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{docID},
+		Kwargs:  updates,
 	}
 
-	var resp models.DocumentResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfDocument.update", c.documentByID, documentHasEmptyID)
 }
 
 // DocumentDelete deletes a document by ID
@@ -301,20 +324,20 @@ func (c *Client) DocumentDelete(
 	ctx context.Context,
 	docID string,
 ) error {
-	kwargs := map[string]any{
-		"id": docID,
+	if docID == "" {
+		return errors.New("docID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfDocument.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{docID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

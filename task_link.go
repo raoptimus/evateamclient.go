@@ -9,7 +9,6 @@
 package evateamclient
 
 import (
-	"bytes"
 	"context"
 	encjson "encoding/json"
 	"strings"
@@ -316,57 +315,30 @@ func (c *Client) TaskLinkCreate(
 		return nil, err
 	}
 
-	return c.parseTaskLinkCreateResult(ctx, resp.Result)
+	return parseWriteResult(ctx, resp.Result, "CmfRelationOption.create", c.fetchTaskLinkByIDOrCode, taskLinkHasEmptyID)
 }
 
-// parseTaskLinkCreateResult parses the `result` of CmfRelationOption.create.
-// The documentation does not fix its shape, so both known forms are
-// supported: a bare ID/code string (needs a follow-up .get, like
-// TaskCreate) or a full object.
-func (c *Client) parseTaskLinkCreateResult(ctx context.Context, raw encjson.RawMessage) (*models.TaskLink, error) {
-	const errEmptyResult = "CmfRelationOption.create returned empty result"
-
-	trimmed := bytes.TrimSpace(raw)
-	switch {
-	case len(trimmed) == 0, string(trimmed) == "null", string(trimmed) == "false", string(trimmed) == `""`:
-		return nil, errors.New(errEmptyResult)
-	case trimmed[0] == '"':
-		var idOrCode string
-		if err := encjson.Unmarshal(trimmed, &idOrCode); err != nil {
-			return nil, errors.WithMessage(err, "parse CmfRelationOption.create result")
-		}
-
-		// The bare string can be an ID ("CmfRelationOption:uuid") or a code
-		// ("RLO-000123"); only IDs carry the ":" class-name prefix.
-		field := TaskLinkFieldCode
-		if strings.Contains(idOrCode, ":") {
-			field = TaskLinkFieldID
-		}
-
-		qb := NewQueryBuilder().
-			Select(DefaultTaskLinkFields...).
-			From(EntityRelation).
-			Where(sq.Eq{field: idOrCode}).
-			Limit(1)
-
-		link, _, err := c.TaskLinkQuery(ctx, qb)
-		if err != nil {
-			return nil, errors.WithMessagef(err, "fetch created task link %s", idOrCode)
-		}
-		if link == nil || link.ID == "" {
-			return nil, errors.New(errEmptyResult)
-		}
-		return link, nil
-	default:
-		var link models.TaskLink
-		if err := encjson.Unmarshal(trimmed, &link); err != nil {
-			return nil, errors.WithMessage(err, "parse CmfRelationOption.create result")
-		}
-		if link.ID == "" {
-			return nil, errors.New(errEmptyResult)
-		}
-		return &link, nil
+// fetchTaskLinkByIDOrCode resolves the bare string returned by
+// CmfRelationOption.create — an ID ("CmfRelationOption:uuid") or a code
+// ("RLO-000123"), distinguished by the ":" class-name prefix only IDs carry.
+func (c *Client) fetchTaskLinkByIDOrCode(ctx context.Context, idOrCode string) (*models.TaskLink, error) {
+	field := TaskLinkFieldCode
+	if strings.Contains(idOrCode, ":") {
+		field = TaskLinkFieldID
 	}
+
+	qb := NewQueryBuilder().
+		Select(DefaultTaskLinkFields...).
+		From(EntityRelation).
+		Where(sq.Eq{field: idOrCode}).
+		Limit(1)
+
+	link, _, err := c.TaskLinkQuery(ctx, qb)
+	return link, err
+}
+
+func taskLinkHasEmptyID(link *models.TaskLink) bool {
+	return link == nil || link.ID == ""
 }
 
 // TaskLinkDelete deletes a task link by ID

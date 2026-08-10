@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -180,7 +182,56 @@ func TestClient_ProjectCreate_Success_ReturnsProject(t *testing.T) {
 	assert.Equal(t, "New Project", project.Name)
 }
 
-func TestClient_ProjectUpdate_Success_ReturnsUpdatedProject(t *testing.T) {
+func TestClient_ProjectCreate_ResultIsIDString_FetchesCreatedProject(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfProject:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfProject:new-123", "code": "NEWPROJ", "name": "New Project"}
+		}`),
+	}
+
+	params := ProjectCreateParams{Code: "NEWPROJ", Name: "New Project"}
+	project, err := client.ProjectCreate(testCtx, &params)
+
+	require.NoError(t, err)
+	require.NotNil(t, project)
+	assert.Equal(t, "CmfProject:new-123", project.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_ProjectCreate_EmptyResult_ReturnsError guards against a silent
+// failure (empty/null/false result) being mistaken for a zero-value project.
+func TestClient_ProjectCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			params := ProjectCreateParams{Code: "NEWPROJ", Name: "New Project"}
+			project, err := client.ProjectCreate(testCtx, &params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfProject.create returned empty result")
+			assert.Nil(t, project)
+		})
+	}
+}
+
+// TestClient_ProjectUpdate_Success_SendsIDInArgs is the regression test for
+// the EVA update convention: the id belongs in Args, not Kwargs (see TaskUpdate).
+func TestClient_ProjectUpdate_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -196,6 +247,17 @@ func TestClient_ProjectUpdate_Success_ReturnsUpdatedProject(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfProject.update")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfProject:123"}, parsed.Args) &&
+			assert.Equal(t, map[string]any{"name": "Updated Project"}, parsed.Kwargs)
+	}
 
 	updates := map[string]any{"name": "Updated Project"}
 	project, err := client.ProjectUpdate(testCtx, "CmfProject:123", updates)
@@ -204,7 +266,40 @@ func TestClient_ProjectUpdate_Success_ReturnsUpdatedProject(t *testing.T) {
 	assert.Equal(t, "Updated Project", project.Name)
 }
 
-func TestClient_ProjectDelete_Success_ReturnsNoError(t *testing.T) {
+func TestClient_ProjectUpdate_ResultIsIDString_FetchesUpdatedProject(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfProject:123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfProject:123", "code": "PROJ-001", "name": "Updated Project"}
+		}`),
+	}
+
+	updates := map[string]any{"name": "Updated Project"}
+	project, err := client.ProjectUpdate(testCtx, "CmfProject:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, project)
+	assert.Equal(t, "Updated Project", project.Name)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+func TestClient_ProjectUpdate_EmptyProjectID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	project, err := client.ProjectUpdate(testCtx, "", map[string]any{"name": "x"})
+
+	require.Error(t, err)
+	assert.Nil(t, project)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
+}
+
+// TestClient_ProjectDelete_Success_SendsIDInArgs is the regression test for
+// the EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_ProjectDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -216,10 +311,31 @@ func TestClient_ProjectDelete_Success_ReturnsNoError(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfProject.delete")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfProject:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
+	}
 
 	err := client.ProjectDelete(testCtx, "CmfProject:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_ProjectDelete_EmptyProjectID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.ProjectDelete(testCtx, "")
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }
 
 func TestClient_ProjectAddExecutor_Success_ReturnsNoError(t *testing.T) {

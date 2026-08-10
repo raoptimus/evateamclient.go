@@ -9,10 +9,12 @@
 package evateamclient
 
 import (
+	encjson "encoding/json"
 	"errors"
 	"net/http"
 	"testing"
 
+	"github.com/imroc/req/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -287,7 +289,56 @@ func TestClient_DocumentCreate_Success_ReturnsDocument(t *testing.T) {
 	assert.Equal(t, "New Document", doc.Name)
 }
 
-func TestClient_DocumentUpdate_Success_ReturnsUpdatedDocument(t *testing.T) {
+func TestClient_DocumentCreate_ResultIsIDString_FetchesCreatedDocument(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfDocument:new-123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:new-123", "code": "DOC-100", "name": "New Document"}
+		}`),
+	}
+
+	params := DocumentCreateParams{Name: "New Document", ProjectID: "CmfProject:123"}
+	doc, err := client.DocumentCreate(testCtx, params)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	assert.Equal(t, "CmfDocument:new-123", doc.ID)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected create + follow-up get")
+}
+
+// TestClient_DocumentCreate_EmptyResult_ReturnsError guards against a silent
+// failure (empty/null/false result) being mistaken for a zero-value document.
+func TestClient_DocumentCreate_EmptyResult_ReturnsError(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{"null", `null`},
+		{"empty string", `""`},
+		{"false", `false`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, mockHTTP := newTestClient(t)
+			mockHTTP.response = mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":`+tt.result+`}`)
+
+			params := DocumentCreateParams{Name: "New Document", ProjectID: "CmfProject:123"}
+			doc, err := client.DocumentCreate(testCtx, params)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "CmfDocument.create returned empty result")
+			assert.Nil(t, doc)
+		})
+	}
+}
+
+// TestClient_DocumentUpdate_Success_SendsIDInArgs is the regression test for
+// the EVA update convention: the id belongs in Args, not Kwargs (see TaskUpdate).
+func TestClient_DocumentUpdate_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -303,6 +354,17 @@ func TestClient_DocumentUpdate_Success_ReturnsUpdatedDocument(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfDocument.update")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfDocument:123"}, parsed.Args) &&
+			assert.Equal(t, map[string]any{"name": "Updated Document"}, parsed.Kwargs)
+	}
 
 	updates := map[string]any{"name": "Updated Document"}
 	doc, err := client.DocumentUpdate(testCtx, "CmfDocument:123", updates)
@@ -311,7 +373,40 @@ func TestClient_DocumentUpdate_Success_ReturnsUpdatedDocument(t *testing.T) {
 	assert.Equal(t, "Updated Document", doc.Name)
 }
 
-func TestClient_DocumentDelete_Success_ReturnsNoError(t *testing.T) {
+func TestClient_DocumentUpdate_ResultIsIDString_FetchesUpdatedDocument(t *testing.T) {
+	client, mockHTTP := newTestClientWithSequentialMock(t)
+
+	mockHTTP.responses = []*req.Response{
+		mockResponse(http.StatusOK, `{"jsonrpc":"2.2","result":"CmfDocument:123"}`),
+		mockResponse(http.StatusOK, `{
+			"jsonrpc": "2.2",
+			"result": {"id": "CmfDocument:123", "code": "DOC-001", "name": "Updated Document"}
+		}`),
+	}
+
+	updates := map[string]any{"name": "Updated Document"}
+	doc, err := client.DocumentUpdate(testCtx, "CmfDocument:123", updates)
+
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+	assert.Equal(t, "Updated Document", doc.Name)
+	assert.Equal(t, 2, mockHTTP.callIdx, "expected update + follow-up get")
+}
+
+func TestClient_DocumentUpdate_EmptyDocID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	doc, err := client.DocumentUpdate(testCtx, "", map[string]any{"name": "x"})
+
+	require.Error(t, err)
+	assert.Nil(t, doc)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
+}
+
+// TestClient_DocumentDelete_Success_SendsIDInArgs is the regression test for
+// the EVA delete convention: the id belongs in Args, not Kwargs (see TaskDelete).
+func TestClient_DocumentDelete_Success_SendsIDInArgs(t *testing.T) {
 	client, mockHTTP := newTestClient(t)
 
 	respBody := `{
@@ -323,8 +418,29 @@ func TestClient_DocumentDelete_Success_ReturnsNoError(t *testing.T) {
 	mockHTTP.urlCheck = func(url string) bool {
 		return assert.Contains(t, url, "m=CmfDocument.delete")
 	}
+	mockHTTP.bodyCheck = func(body []byte) bool {
+		var parsed struct {
+			Args   []any          `json:"args"`
+			Kwargs map[string]any `json:"kwargs"`
+		}
+		if err := encjson.Unmarshal(body, &parsed); !assert.NoError(t, err) {
+			return false
+		}
+		return assert.Equal(t, []any{"CmfDocument:123"}, parsed.Args) &&
+			assert.Nil(t, parsed.Kwargs)
+	}
 
 	err := client.DocumentDelete(testCtx, "CmfDocument:123")
 
 	assert.NoError(t, err)
+}
+
+func TestClient_DocumentDelete_EmptyDocID_ReturnsErrorWithoutRequest(t *testing.T) {
+	client, mockHTTP := newTestClient(t)
+	mockHTTP.err = errors.New("must not be called")
+
+	err := client.DocumentDelete(testCtx, "")
+
+	assert.Error(t, err)
+	assert.Equal(t, 0, mockHTTP.calls, "validation must fail before any HTTP request")
 }

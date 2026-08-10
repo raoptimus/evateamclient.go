@@ -128,6 +128,55 @@ func TestIntegration_ProjectTimeLogs(t *testing.T) {
 	}
 }
 
+// TestIntegration_TimeLogCreate_UpdateDelete_FullCycle is the red-green
+// regression test for SPEC-02: TimeLogCreate/TimeLogUpdate/TimeLogDelete
+// must actually write, not silently no-op (id-in-kwargs bug) or fail to
+// parse a bare-string result (two-phase parsing bug).
+func TestIntegration_TimeLogCreate_UpdateDelete_FullCycle(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	taskID := getIntegrationTaskID(t, c, projectID)
+
+	log, err := c.TimeLogCreate(ctx, TimeLogCreateParams{
+		ParentID:  taskID,
+		TimeSpent: 30,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, log)
+	require.NotEmpty(t, log.ID, "TimeLogCreate must return a created time log, not a silent no-op")
+
+	deleted := false
+	t.Cleanup(func() {
+		if !deleted {
+			_ = c.TimeLogDelete(context.Background(), log.ID)
+		}
+	})
+
+	fetched, _, err := c.TimeLog(ctx, log.ID, DefaultTimeLogFields)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, log.ID, fetched.ID)
+	assert.Equal(t, 30, fetched.TimeSpent)
+
+	updated, err := c.TimeLogUpdate(ctx, log.ID, map[string]any{"time_spent": 60})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	assert.Equal(t, log.ID, updated.ID, "update should return same time log ID")
+	assert.Equal(t, 60, updated.TimeSpent)
+
+	reFetched, _, err := c.TimeLog(ctx, log.ID, DefaultTimeLogFields)
+	require.NoError(t, err)
+	assert.Equal(t, 60, reFetched.TimeSpent, "update should persist")
+
+	require.NoError(t, c.TimeLogDelete(ctx, log.ID))
+	deleted = true
+
+	_, _, err = c.TimeLog(ctx, log.ID, DefaultTimeLogFields)
+	assert.Error(t, err, "deleted time log should no longer be readable")
+}
+
 func TestIntegration_TimeLogs_Deprecated(t *testing.T) {
 	c := newIntegrationClient(t)
 	projectID := getIntegrationProjectID(t, c)

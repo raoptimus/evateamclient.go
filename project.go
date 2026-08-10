@@ -10,6 +10,7 @@ package evateamclient
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -299,12 +300,32 @@ func (c *Client) ProjectCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.ProjectGetResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfProject.create", c.projectByID, projectHasEmptyID)
+}
+
+// projectByID fetches a project by ID, for the two-phase create/update
+// follow-up `.get` when CmfProject.create/update returns a bare ID string.
+func (c *Client) projectByID(ctx context.Context, id string) (*models.Project, error) {
+	qb := NewQueryBuilder().
+		Select(DefaultProjectFields...).
+		From(EntityProject).
+		Where(sq.Eq{ProjectFieldID: id}).
+		Limit(1)
+
+	project, _, err := c.ProjectQuery(ctx, qb)
+	return project, err
+}
+
+func projectHasEmptyID(project *models.Project) bool {
+	return project == nil || project.ID == ""
 }
 
 // ProjectUpdate updates an existing project
@@ -319,26 +340,27 @@ func (c *Client) ProjectUpdate(
 	projectID string,
 	updates map[string]any,
 ) (*models.Project, error) {
-	kwargs := map[string]any{
-		"id": projectID,
-	}
-	for k, v := range updates {
-		kwargs[k] = v
+	if projectID == "" {
+		return nil, errors.New("projectID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfProject.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{projectID},
+		Kwargs:  updates,
 	}
 
-	var resp models.ProjectGetResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfProject.update", c.projectByID, projectHasEmptyID)
 }
 
 // ProjectDelete deletes a project by ID
@@ -349,20 +371,20 @@ func (c *Client) ProjectDelete(
 	ctx context.Context,
 	projectID string,
 ) error {
-	kwargs := map[string]any{
-		"id": projectID,
+	if projectID == "" {
+		return errors.New("projectID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfProject.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{projectID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

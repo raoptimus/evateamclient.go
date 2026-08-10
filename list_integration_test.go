@@ -10,8 +10,10 @@ package evateamclient
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/stretchr/testify/assert"
@@ -212,6 +214,62 @@ func TestIntegration_OpenProjectLists(t *testing.T) {
 		assert.Equal(t, projectID, l.ProjectID)
 		assert.Equal(t, "OPEN", l.CacheStatusType, "list %s should have OPEN status", l.Code)
 	}
+}
+
+// TestIntegration_ListCreate_UpdateDelete_FullCycle is the red-green
+// regression test for SPEC-02: ListCreate/ListUpdate/ListDelete must
+// actually write, not silently no-op (id-in-kwargs bug) or fail to parse a
+// bare-string result (two-phase parsing bug). Creates a sprint (list of
+// type SPR-).
+func TestIntegration_ListCreate_UpdateDelete_FullCycle(t *testing.T) {
+	c := newIntegrationClient(t)
+	projectID := getIntegrationProjectID(t, c)
+	ctx := context.Background()
+
+	suffix := time.Now().UnixNano()
+
+	l, err := c.ListCreate(ctx, &ListCreateParams{
+		Name:     fmt.Sprintf("[TEST] sprint %d", suffix),
+		ParentID: projectID,
+		Goal:     "created by TestIntegration_ListCreate_UpdateDelete_FullCycle",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, l)
+	require.NotEmpty(t, l.ID, "ListCreate must return a created list, not a silent no-op")
+
+	deleted := false
+	t.Cleanup(func() {
+		if !deleted {
+			_ = c.ListDelete(context.Background(), l.ID)
+		}
+	})
+
+	qb := NewQueryBuilder().
+		Select(DefaultListFields...).
+		From(EntityList).
+		Where(sq.Eq{ListFieldID: l.ID}).
+		Limit(1)
+	fetched, _, err := c.ListQuery(ctx, qb)
+	require.NoError(t, err)
+	require.NotNil(t, fetched)
+	assert.Equal(t, l.ID, fetched.ID)
+
+	updatedName := fmt.Sprintf("[TEST] sprint UPDATED %d", suffix)
+	updated, err := c.ListUpdate(ctx, l.ID, map[string]any{"name": updatedName})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	assert.Equal(t, l.ID, updated.ID, "update should return same list ID")
+	assert.Equal(t, updatedName, updated.Name)
+
+	reFetched, _, err := c.ListQuery(ctx, qb)
+	require.NoError(t, err)
+	assert.Equal(t, updatedName, reFetched.Name, "update should persist")
+
+	require.NoError(t, c.ListDelete(ctx, l.ID))
+	deleted = true
+
+	_, _, err = c.ListQuery(ctx, qb)
+	assert.Error(t, err, "deleted list should no longer be readable")
 }
 
 func TestIntegration_Lists_Deprecated(t *testing.T) {

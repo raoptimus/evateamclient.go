@@ -10,8 +10,10 @@ package evateamclient
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/pkg/errors"
 	"github.com/raoptimus/evateamclient.go/models"
 )
 
@@ -331,12 +333,27 @@ func (c *Client) TimeLogCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.TimeLogResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfTimeTrackerHistory.create", c.timeLogByID, timeLogHasEmptyID)
+}
+
+// timeLogByID fetches a time log entry by ID, for the two-phase
+// create/update follow-up `.get` when CmfTimeTrackerHistory.create/update
+// returns a bare ID string.
+func (c *Client) timeLogByID(ctx context.Context, id string) (*models.TimeLog, error) {
+	log, _, err := c.TimeLog(ctx, id, DefaultTimeLogFields)
+	return log, err
+}
+
+func timeLogHasEmptyID(log *models.TimeLog) bool {
+	return log == nil || log.ID == ""
 }
 
 // TimeLogUpdate updates an existing time log entry
@@ -351,26 +368,27 @@ func (c *Client) TimeLogUpdate(
 	timeLogID string,
 	updates map[string]any,
 ) (*models.TimeLog, error) {
-	kwargs := map[string]any{
-		"id": timeLogID,
-	}
-	for k, v := range updates {
-		kwargs[k] = v
+	if timeLogID == "" {
+		return nil, errors.New("timeLogID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTimeTrackerHistory.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{timeLogID},
+		Kwargs:  updates,
 	}
 
-	var resp models.TimeLogResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfTimeTrackerHistory.update", c.timeLogByID, timeLogHasEmptyID)
 }
 
 // TimeLogDelete deletes a time log entry by ID
@@ -381,20 +399,20 @@ func (c *Client) TimeLogDelete(
 	ctx context.Context,
 	timeLogID string,
 ) error {
-	kwargs := map[string]any{
-		"id": timeLogID,
+	if timeLogID == "" {
+		return errors.New("timeLogID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfTimeTrackerHistory.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{timeLogID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)

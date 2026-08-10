@@ -10,6 +10,7 @@ package evateamclient
 
 import (
 	"context"
+	encjson "encoding/json"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/pkg/errors"
@@ -335,12 +336,33 @@ func (c *Client) ListCreate(
 		Kwargs:  kwargs,
 	}
 
-	var resp models.ListResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfList.create", c.listByID, listHasEmptyID)
+}
+
+// listByID fetches a list (sprint/release) by ID, for the two-phase
+// create/update follow-up `.get` when CmfList.create/update returns a bare
+// ID string.
+func (c *Client) listByID(ctx context.Context, id string) (*models.List, error) {
+	qb := NewQueryBuilder().
+		Select(DefaultListFields...).
+		From(EntityList).
+		Where(sq.Eq{ListFieldID: id}).
+		Limit(1)
+
+	list, _, err := c.ListQuery(ctx, qb)
+	return list, err
+}
+
+func listHasEmptyID(list *models.List) bool {
+	return list == nil || list.ID == ""
 }
 
 // ListUpdate updates an existing list
@@ -356,26 +378,27 @@ func (c *Client) ListUpdate(
 	listID string,
 	updates map[string]any,
 ) (*models.List, error) {
-	kwargs := map[string]any{
-		"id": listID,
-	}
-	for k, v := range updates {
-		kwargs[k] = v
+	if listID == "" {
+		return nil, errors.New("listID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfList.update",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{listID},
+		Kwargs:  updates,
 	}
 
-	var resp models.ListResponse
+	var resp struct {
+		JSONRPC string             `json:"jsonrpc"`
+		Result  encjson.RawMessage `json:"result"`
+	}
 	if err := c.doRequest(ctx, reqBody, &resp); err != nil {
 		return nil, err
 	}
 
-	return &resp.Result, nil
+	return parseWriteResult(ctx, resp.Result, "CmfList.update", c.listByID, listHasEmptyID)
 }
 
 // ListClose closes a list (sprint/release)
@@ -399,20 +422,20 @@ func (c *Client) ListDelete(
 	ctx context.Context,
 	listID string,
 ) error {
-	kwargs := map[string]any{
-		"id": listID,
+	if listID == "" {
+		return errors.New("listID is required")
 	}
 
 	reqBody := &RPCRequest{
 		JSONRPC: "2.2",
 		Method:  "CmfList.delete",
 		CallID:  newCallID(),
-		Kwargs:  kwargs,
+		Args:    []any{listID},
 	}
 
 	var resp struct {
 		JSONRPC string `json:"jsonrpc"`
-		Result  bool   `json:"result"`
+		Result  any    `json:"result"`
 	}
 
 	return c.doRequest(ctx, reqBody, &resp)
