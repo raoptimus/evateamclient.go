@@ -11,7 +11,6 @@ package tools_test
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 
 	evateamclient "github.com/raoptimus/evateamclient.go"
@@ -26,17 +25,11 @@ import (
 func TestIntegration_TaskGet_MissingCodeReturnsError(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := evateamclient.NewClient(&evateamclient.Config{
-		BaseURL:  os.Getenv("EVA_API_URL"),
-		APIToken: os.Getenv("EVA_API_TOKEN"),
-		Debug:    true,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { client.Close() })
+	client := newIntegrationClient(t)
 
 	tt := tools.NewTaskTools(client)
 
-	_, err = tt.TaskGet(ctx, &tools.TaskGetInput{
+	_, err := tt.TaskGet(ctx, &tools.TaskGetInput{
 		Code:   "NOPE-00000000",
 		Fields: tools.StringList{evateamclient.TaskFieldCode, evateamclient.TaskFieldName},
 	})

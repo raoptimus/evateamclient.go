@@ -10,21 +10,13 @@ package evateamclient
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestIntegration_Stats(t *testing.T) {
-	c, err := NewClient(&Config{
-		BaseURL:  os.Getenv("EVA_API_URL"),
-		APIToken: os.Getenv("EVA_API_TOKEN"),
-		Debug:    true,
-		Timeout:  0,
-	})
-	require.NoError(t, err)
-	defer c.Close()
+	c := newIntegrationClient(t)
 
 	report, err := c.SprintExecutorsKPI(context.Background(), &SprintExecutorsKPIParams{
 		ProjectCode: "epud",

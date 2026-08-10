@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -32,13 +31,7 @@ const integrationProjectCode = "epud"
 func TestIntegration_TaskCreate_TagsViaMCP(t *testing.T) {
 	ctx := context.Background()
 
-	client, err := evateamclient.NewClient(&evateamclient.Config{
-		BaseURL:  os.Getenv("EVA_API_URL"),
-		APIToken: os.Getenv("EVA_API_TOKEN"),
-		Debug:    true,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { client.Close() })
+	client := newIntegrationClient(t)
 
 	// Resolve the integration project ID.
 	project, _, err := client.Project(ctx, integrationProjectCode, evateamclient.DefaultProjectFields)

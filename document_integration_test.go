@@ -26,9 +26,14 @@ const integrationProjectCode = "epud"
 func newIntegrationClient(t *testing.T) *Client {
 	t.Helper()
 
+	baseURL, token := os.Getenv("EVA_API_URL"), os.Getenv("EVA_API_TOKEN")
+	if baseURL == "" || token == "" {
+		t.Skip("EVA_API_URL and EVA_API_TOKEN are required for integration tests")
+	}
+
 	c, err := NewClient(&Config{
-		BaseURL:  os.Getenv("EVA_API_URL"),
-		APIToken: os.Getenv("EVA_API_TOKEN"),
+		BaseURL:  baseURL,
+		APIToken: token,
 		Debug:    true,
 	})
 	require.NoError(t, err)
