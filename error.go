@@ -8,13 +8,29 @@
 
 package evateamclient
 
-import "github.com/pkg/errors"
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
 
 var (
 	ErrOptionIsRequired    = errors.New("option is required")
 	ErrBodyIsRequired      = errors.New("body is required")
 	ErrRPCMethodIsRequired = errors.New("RPCRequest.Method is required")
 )
+
+// APIError represents a non-2xx HTTP response from the EVA API.
+// StatusCode and Body are kept separately so callers can classify the failure
+// without parsing the error message.
+type APIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Body)
+}
 
 // RPCError represents JSON-RPC error response
 type RPCError struct {

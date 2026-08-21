@@ -170,7 +170,7 @@ func (c *Client) doRequest(ctx context.Context, body *RPCRequest, result any) er
 	respBodyBytes = resp.Bytes()
 
 	if resp.IsErrorState() {
-		return errors.Errorf("API error %d: %s", resp.StatusCode, string(resp.Bytes()))
+		return errors.WithStack(&APIError{StatusCode: resp.StatusCode, Body: string(resp.Bytes())})
 	}
 
 	// Check for RPC error in 200 OK response
