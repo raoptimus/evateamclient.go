@@ -10,8 +10,10 @@ package tools_test
 
 import (
 	"errors"
+	"net/http"
 	"testing"
 
+	evateamclient "github.com/raoptimus/evateamclient.go"
 	"github.com/raoptimus/evateamclient.go/pkg/evateamclient-mcp/tools"
 	"github.com/stretchr/testify/assert"
 )
@@ -112,4 +114,71 @@ func TestFormatToolError_GenericError(t *testing.T) {
 	result := tools.FormatToolError(err)
 
 	assert.Contains(t, result, "Operation failed")
+}
+
+func TestWrapError_APIError(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantErr    error
+	}{
+		{
+			name:       "invalid token is reported as auth failure, not as missing permission",
+			statusCode: http.StatusForbidden,
+			body:       "Invalid API token",
+			wantErr:    tools.ErrUnauthorized,
+		},
+		{
+			name:       "forbidden without token mention stays a permission problem",
+			statusCode: http.StatusForbidden,
+			body:       "You have no access to this project",
+			wantErr:    tools.ErrForbidden,
+		},
+		{
+			name:       "unauthorized",
+			statusCode: http.StatusUnauthorized,
+			body:       "Unauthorized",
+			wantErr:    tools.ErrUnauthorized,
+		},
+		{
+			name:       "not found",
+			statusCode: http.StatusNotFound,
+			body:       "Unknown method",
+			wantErr:    tools.ErrNotFound,
+		},
+		{
+			name:       "bad request",
+			statusCode: http.StatusBadRequest,
+			body:       "Malformed kwargs",
+			wantErr:    tools.ErrInvalidInput,
+		},
+		{
+			name:       "server error",
+			statusCode: http.StatusInternalServerError,
+			body:       "Internal error",
+			wantErr:    tools.ErrInternalServer,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			apiErr := &evateamclient.APIError{StatusCode: tt.statusCode, Body: tt.body}
+
+			err := tools.WrapError("test_operation", apiErr)
+
+			assert.Error(t, err)
+			assert.True(t, errors.Is(err, tt.wantErr))
+			assert.Contains(t, err.Error(), tt.body)
+		})
+	}
+}
+
+func TestFormatToolError_InvalidTokenKeepsResponseBody(t *testing.T) {
+	apiErr := &evateamclient.APIError{StatusCode: http.StatusForbidden, Body: "Invalid API token"}
+
+	result := tools.FormatToolError(tools.WrapError("person_list", apiErr))
+
+	assert.Contains(t, result, "EVA_API_TOKEN")
+	assert.Contains(t, result, "Invalid API token")
 }
